@@ -340,7 +340,7 @@ class QuerySegmentListProcessor {
 
 		// Try to safe time (SELECT is cheaper than creating/dropping 3 temp tables):
 		$res = $this->connection->select(
-			$smwtable, // Remove backticks for MediaWiki DBAL
+			$smwtable,
 			's_id',
 			$valuecond,
 			__METHOD__,
