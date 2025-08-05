@@ -2,12 +2,12 @@
 
 namespace SMW\Maintenance;
 
+use MediaWiki\Maintenance\Maintenance;
 use Onoi\MessageReporter\MessageReporter;
 use SMW\DIProperty;
 use SMW\Services\ServicesFactory as ApplicationFactory;
 use SMW\Setup;
 use SMW\SQLStore\SQLStore;
-use Title;
 
 $basePath = getenv( 'MW_INSTALL_PATH' ) !== false ? getenv( 'MW_INSTALL_PATH' ) : __DIR__ . '/../../..';
 
@@ -25,7 +25,7 @@ if ( getenv( 'MW_INSTALL_PATH' ) !== false ) {
  *
  * @author mwjames
  */
-class updateQueryDependencies extends \Maintenance {
+class updateQueryDependencies extends Maintenance {
 
 	/**
 	 * @var MessageReporter
@@ -160,6 +160,7 @@ class updateQueryDependencies extends \Maintenance {
 		$this->reportMessage( "\n   ... found $expected entities ..." );
 		$this->reportMessage( "\n" );
 
+		$titleFactory = $this->getServiceContainer()->getTitleFactory();
 		foreach ( $res as $row ) {
 			$i++;
 
@@ -168,7 +169,7 @@ class updateQueryDependencies extends \Maintenance {
 			);
 
 			$updateJob = $jobFactory->newUpdateJob(
-				Title::makeTitleSafe( $row->smw_namespace, $row->smw_title ),
+				$titleFactory->makeTitleSafe( $row->smw_namespace, $row->smw_title ),
 				[
 					'origin' => 'updateQueryDependencies.php'
 				]
