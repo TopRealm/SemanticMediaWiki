@@ -18,7 +18,7 @@ use SMWDataItem as DataItem;
 if ( getenv( 'MW_INSTALL_PATH' ) !== false ) {
 	require_once getenv( 'MW_INSTALL_PATH' ) . '/maintenance/Maintenance.php';
 } else {
-	require_once '/www/wwwroot/MediaWiki/maintenance/Maintenance.php';
+	require_once __DIR__ . '/../../../maintenance/Maintenance.php';
 }
 // @codeCoverageIgnoreEnd
 
