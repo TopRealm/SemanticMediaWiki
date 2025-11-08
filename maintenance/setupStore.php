@@ -17,6 +17,10 @@ use SMW\Utils\CliMsgFormatter;
  * Load the required class
  */
 // @codeCoverageIgnoreStart
+// Ensure MediaWiki install path is available for CLI runs
+if ( getenv( 'MW_INSTALL_PATH' ) === false ) {
+    putenv( 'MW_INSTALL_PATH=/www/wwwroot/MediaWiki' );
+}
 if ( getenv( 'MW_INSTALL_PATH' ) !== false ) {
 	require_once getenv( 'MW_INSTALL_PATH' ) . '/maintenance/Maintenance.php';
 } else {
