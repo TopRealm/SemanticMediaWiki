@@ -267,7 +267,9 @@ trait ConfigLegacyTrait {
 				'smwgFactboxCacheRefreshOnPurge' => '3.1.0',
 
 				// 3.2
-				'smwgSchemaTypes' => '3.3.0',
+				// Disabled smgSchemaTypes removal notice because we have
+				// never used it.
+				//'smwgSchemaTypes' => '3.3.0',
 
 				// Identifies options of settings planned to be removed
 				'options' => [
@@ -323,6 +325,8 @@ trait ConfigLegacyTrait {
 
 				// 3.2
 				'smwgContLang' => 'smwfContLang() (#4618)',
+				// Disabled smgSchemaTypes removal notice because we have
+				// never used it.
 				'smwgSchemaTypes' => 'SchemaTypes (#4591)',
 
 				// Identifies options of settings planned to be replaced
