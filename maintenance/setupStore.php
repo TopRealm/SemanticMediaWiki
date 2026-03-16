@@ -234,8 +234,6 @@ class setupStore extends Maintenance {
 	}
 
 	/**
-	 * @param string $storeName
-	 *
 	 * @return bool
 	 */
 	protected function hasDeletionVerification() {
