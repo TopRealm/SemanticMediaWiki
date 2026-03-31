@@ -4,9 +4,9 @@ namespace SMW\Query\ResultPrinters\ListResultPrinter;
 
 use MediaWiki\Linker\Linker;
 use MediaWiki\Parser\Sanitizer;
+use SMW\DataValues\DataValue;
 use SMW\Query\Result\ResultArray;
 use SMW\Query\ResultPrinters\PrefixParameterProcessor;
-use SMWDataValue;
 
 /**
  * Class ValueTextsBuilder
@@ -20,11 +20,9 @@ class ValueTextsBuilder {
 
 	use ParameterDictionaryUser;
 
-	private $linker;
-	private $prefixParameterProcessor;
+	private ?Linker $linker = null;
 
-	public function __construct( PrefixParameterProcessor $prefixParameterProcessor ) {
-		$this->prefixParameterProcessor = $prefixParameterProcessor;
+	public function __construct( private PrefixParameterProcessor $prefixParameterProcessor ) {
 	}
 
 	/**
@@ -33,7 +31,7 @@ class ValueTextsBuilder {
 	 *
 	 * @return string
 	 */
-	public function getValuesText( ResultArray $field, $column = 0 ) {
+	public function getValuesText( ResultArray $field, $column = 0 ): string {
 		$valueTexts = $this->getValueTexts( $field, $column );
 
 		return implode( $this->get( 'valuesep' ), $valueTexts );
@@ -45,7 +43,7 @@ class ValueTextsBuilder {
 	 *
 	 * @return string[]
 	 */
-	private function getValueTexts( ResultArray $field, $column ) {
+	private function getValueTexts( ResultArray $field, $column ): array {
 		$valueTexts = [];
 
 		$field->reset();
@@ -63,12 +61,12 @@ class ValueTextsBuilder {
 	}
 
 	/**
-	 * @param SMWDataValue $value
+	 * @param DataValue $value
 	 * @param int $column
 	 *
 	 * @return string
 	 */
-	private function getValueText( SMWDataValue $value, $column = 0 ) {
+	private function getValueText( DataValue $value, $column = 0 ): string {
 		$isSubject = ( $column === 0 );
 		$dataValueMethod = $this->prefixParameterProcessor->useLongText( $isSubject ) ? 'getLongText' : 'getShortText';
 
@@ -83,9 +81,9 @@ class ValueTextsBuilder {
 	 *
 	 * @param int $columnNumber Column number
 	 *
-	 * @return \Linker|null
+	 * @return Linker|null
 	 */
-	private function getLinkerForColumn( $columnNumber ) {
+	private function getLinkerForColumn( $columnNumber ): ?Linker {
 		if ( ( $columnNumber === 0 && $this->get( 'link-first' ) ) ||
 			( $columnNumber > 0 && $this->get( 'link-others' ) ) ) {
 			return $this->getLinker();
@@ -97,14 +95,14 @@ class ValueTextsBuilder {
 	/**
 	 * @return Linker
 	 */
-	protected function getLinker() {
+	protected function getLinker(): ?Linker {
 		return $this->linker;
 	}
 
 	/**
 	 * @param Linker $linker
 	 */
-	public function setLinker( Linker $linker ) {
+	public function setLinker( Linker $linker ): void {
 		$this->linker = $linker;
 	}
 
@@ -113,7 +111,7 @@ class ValueTextsBuilder {
 	 *
 	 * @return string
 	 */
-	private function sanitizeValueText( $text ) {
+	private function sanitizeValueText( string $text ): string {
 		if ( $this->isSimpleList() ) {
 			return $text;
 		}
@@ -126,7 +124,7 @@ class ValueTextsBuilder {
 	/**
 	 * @return bool
 	 */
-	private function isSimpleList() {
+	private function isSimpleList(): bool {
 		$format = $this->get( 'format' );
 		return $format !== 'ul' && $format !== 'ol';
 	}

@@ -33,29 +33,39 @@ class FourstoreRepositoryConnector extends GenericRepositoryConnector {
 	 *
 	 * @return RepositoryResult
 	 */
-	public function doQuery( $sparql ) {
+	public function doQuery( $sparql ): RepositoryResult {
 		if ( $this->repositoryClient->getQueryEndpoint() === '' ) {
 			throw new BadHttpEndpointResponseException( BadHttpEndpointResponseException::ERROR_NOSERVICE, $sparql, 'not specified' );
 		}
-
-		$this->httpRequest->setOption( CURLOPT_URL, $this->repositoryClient->getQueryEndpoint() );
-		$this->httpRequest->setOption( CURLOPT_HTTPHEADER, [ 'Accept: application/sparql-results+xml,application/xml;q=0.8' ] );
-		$this->httpRequest->setOption( CURLOPT_POST, true );
 
 		$defaultGraph = $this->repositoryClient->getDefaultGraph();
 
 		$parameterString = "query=" . urlencode( $sparql ) . "&restricted=1" .
 			( ( $defaultGraph !== '' ) ? '&default-graph-uri=' . urlencode( $defaultGraph ) : '' );
 
-		$this->httpRequest->setOption( CURLOPT_POSTFIELDS, $parameterString );
+		$request = $this->httpRequestFactory->create(
+			$this->repositoryClient->getQueryEndpoint(),
+			array_merge( $this->getBaseOptions(), [
+				'method' => 'POST',
+				'postData' => $parameterString,
+			] ),
+			__METHOD__
+		);
 
-		$httpResponse = $this->httpRequest->execute();
+		$request->setHeader( 'Accept', 'application/sparql-results+xml,application/xml;q=0.8' );
 
-		if ( $this->httpRequest->getLastErrorCode() == 0 ) {
+		$status = $request->execute();
+		$this->lastErrorCode = $request->getStatus();
+
+		if ( $status->isOK() ) {
 			$xmlResponseParser = new XmlResponseParser();
-			$result = $xmlResponseParser->parse( $httpResponse );
+			$result = $xmlResponseParser->parse( $request->getContent() );
 		} else {
-			$this->mapHttpRequestError( $this->repositoryClient->getQueryEndpoint(), $sparql );
+			$this->mapHttpRequestError(
+				$request->getStatus(),
+				$this->repositoryClient->getQueryEndpoint(),
+				$sparql
+			);
 			$result = new RepositoryResult();
 			$result->setErrorCode( RepositoryResult::ERROR_UNREACHABLE );
 		}
@@ -81,7 +91,7 @@ class FourstoreRepositoryConnector extends GenericRepositoryConnector {
 	 *
 	 * @return bool stating whether the operations succeeded
 	 */
-	public function deleteContentByValue( $propertyName, $objectName, $extraNamespaces = [] ) {
+	public function deleteContentByValue( $propertyName, $objectName, $extraNamespaces = [] ): bool {
 		$affectedObjects = $this->select( '*', "?s $propertyName $objectName", [], $extraNamespaces );
 		$success = ( $affectedObjects->getErrorCode() == RepositoryResult::ERROR_NOERROR );
 
@@ -110,13 +120,10 @@ class FourstoreRepositoryConnector extends GenericRepositoryConnector {
 	 *
 	 * @return bool
 	 */
-	public function doHttpPost( $payload ) {
+	public function doHttpPost( $payload ): bool {
 		if ( $this->repositoryClient->getDataEndpoint() === '' ) {
 			throw new BadHttpEndpointResponseException( BadHttpEndpointResponseException::ERROR_NOSERVICE, "SPARQL POST with data: $payload", 'not specified' );
 		}
-
-		$this->httpRequest->setOption( CURLOPT_URL, $this->repositoryClient->getDataEndpoint() );
-		$this->httpRequest->setOption( CURLOPT_POST, true );
 
 		$defaultGraph = $this->repositoryClient->getDefaultGraph();
 
@@ -124,14 +131,28 @@ class FourstoreRepositoryConnector extends GenericRepositoryConnector {
 			( ( $defaultGraph !== '' ) ? urlencode( $defaultGraph ) : 'default' ) .
 			'&mime-type=application/x-turtle';
 
-		$this->httpRequest->setOption( CURLOPT_POSTFIELDS, $parameterString );
-		$this->httpRequest->execute();
+		$request = $this->httpRequestFactory->create(
+			$this->repositoryClient->getDataEndpoint(),
+			array_merge( $this->getBaseOptions(), [
+				'method' => 'POST',
+				'postData' => $parameterString,
+			] ),
+			__METHOD__
+		);
 
-		if ( $this->httpRequest->getLastErrorCode() == 0 ) {
+		$status = $request->execute();
+		$this->lastErrorCode = $request->getStatus();
+
+		if ( $status->isOK() ) {
 			return true;
 		}
 
-		$this->mapHttpRequestError( $this->repositoryClient->getDataEndpoint(), $payload );
+		$this->mapHttpRequestError(
+			$request->getStatus(),
+			$this->repositoryClient->getDataEndpoint(),
+			$payload
+		);
+
 		return false;
 	}
 
@@ -142,26 +163,37 @@ class FourstoreRepositoryConnector extends GenericRepositoryConnector {
 	 *
 	 * @since 2.0
 	 */
-	public function doUpdate( $sparql ) {
+	public function doUpdate( $sparql ): bool {
 		if ( $this->repositoryClient->getUpdateEndpoint() === '' ) {
 			throw new BadHttpEndpointResponseException( BadHttpEndpointResponseException::ERROR_NOSERVICE, $sparql, 'not specified' );
 		}
 
-		$this->httpRequest->setOption( CURLOPT_URL, $this->repositoryClient->getUpdateEndpoint() );
-		$this->httpRequest->setOption( CURLOPT_POST, true );
-
 		$parameterString = "update=" . urlencode( $sparql );
 
-		$this->httpRequest->setOption( CURLOPT_POSTFIELDS, $parameterString );
-		$this->httpRequest->setOption( CURLOPT_HTTPHEADER, [ 'Content-Type: application/x-www-form-urlencoded' ] );
+		$request = $this->httpRequestFactory->create(
+			$this->repositoryClient->getUpdateEndpoint(),
+			array_merge( $this->getBaseOptions(), [
+				'method' => 'POST',
+				'postData' => $parameterString,
+			] ),
+			__METHOD__
+		);
 
-		$this->httpRequest->execute();
+		$request->setHeader( 'Content-Type', 'application/x-www-form-urlencoded' );
 
-		if ( $this->httpRequest->getLastErrorCode() == 0 ) {
+		$status = $request->execute();
+		$this->lastErrorCode = $request->getStatus();
+
+		if ( $status->isOK() ) {
 			return true;
 		}
 
-		$this->mapHttpRequestError( $this->repositoryClient->getUpdateEndpoint(), $sparql );
+		$this->mapHttpRequestError(
+			$request->getStatus(),
+			$this->repositoryClient->getUpdateEndpoint(),
+			$sparql
+		);
+
 		return false;
 	}
 

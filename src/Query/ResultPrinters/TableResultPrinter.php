@@ -3,15 +3,15 @@
 namespace SMW\Query\ResultPrinters;
 
 use MediaWiki\Html\Html;
-use SMW\DIWikiPage;
+use SMW\DataItems\Blob;
+use SMW\DataItems\WikiPage;
+use SMW\DataValues\DataValue;
 use SMW\Localizer\Message;
 use SMW\Query\PrintRequest;
 use SMW\Query\QueryResult;
 use SMW\Query\QueryStringifier;
 use SMW\Query\Result\ResultArray;
 use SMW\Utils\HtmlTable;
-use SMWDataValue;
-use SMWDIBlob as DIBlob;
 
 /**
  * Print query results in tables
@@ -25,14 +25,11 @@ use SMWDIBlob as DIBlob;
  */
 class TableResultPrinter extends ResultPrinter {
 
-	/**
-	 * @var HtmlTable
-	 */
-	private $htmlTable;
+	private ?HtmlTable $htmlTable = null;
 
-	private $isDataTable;
+	private ?bool $isDataTable = null;
 
-	private $prefixParameterProcessor;
+	private ?PrefixParameterProcessor $prefixParameterProcessor = null;
 
 	/**
 	 * @see ResultPrinter::getName
@@ -48,7 +45,7 @@ class TableResultPrinter extends ResultPrinter {
 	 *
 	 * {@inheritDoc}
 	 */
-	public function isDeferrable() {
+	public function isDeferrable(): bool {
 		return true;
 	}
 
@@ -59,7 +56,7 @@ class TableResultPrinter extends ResultPrinter {
 	 *
 	 * {@inheritDoc}
 	 */
-	public function getParamDefinitions( array $definitions ) {
+	public function getParamDefinitions( array $definitions ): array {
 		$params = parent::getParamDefinitions( $definitions );
 
 		$params['class'] = [
@@ -222,7 +219,7 @@ class TableResultPrinter extends ResultPrinter {
 	 *
 	 * @return string
 	 */
-	private function getRowForSubject( array $subject, $outputMode, array $columnClasses ) {
+	private function getRowForSubject( array $subject, $outputMode, array $columnClasses ): void {
 		foreach ( $subject as $i => $field ) {
 			// $columnClasses will be empty if "headers=hide"
 			// was set.
@@ -247,8 +244,8 @@ class TableResultPrinter extends ResultPrinter {
 	 *
 	 * @return string
 	 */
-	protected function getCellForPropVals( ResultArray $resultArray, $outputMode, $columnClass ) {
-		/** @var SMWDataValue[] $dataValues */
+	protected function getCellForPropVals( ResultArray $resultArray, $outputMode, string $columnClass ): void {
+		/** @var DataValue[] $dataValues */
 		$dataValues = [];
 
 		$dv = $resultArray->getNextDataValue();
@@ -319,13 +316,13 @@ class TableResultPrinter extends ResultPrinter {
 	 *
 	 * @since 1.6.1
 	 *
-	 * @param SMWDataValue[] $dataValues
+	 * @param DataValue[] $dataValues
 	 * @param $outputMode
 	 * @param bool $isSubject
 	 *
 	 * @return string
 	 */
-	protected function getCellContent( array $dataValues, $outputMode, $isSubject ) {
+	protected function getCellContent( array $dataValues, $outputMode, $isSubject ): string {
 		$dataValueMethod = $this->prefixParameterProcessor->useLongText( $isSubject ) ? 'getLongText' : 'getShortText';
 
 		$values = [];
@@ -334,8 +331,8 @@ class TableResultPrinter extends ResultPrinter {
 			// Restore output in Special:Ask on:
 			// - file/image parsing
 			// - text formatting on string elements including italic, bold etc.
-			if ( ( $outputMode === SMW_OUTPUT_HTML && $dv->getDataItem() instanceof DIWikiPage && $dv->getDataItem()->getNamespace() === NS_FILE ) ||
-				( $outputMode === SMW_OUTPUT_HTML && $dv->getDataItem() instanceof DIBlob ) ) {
+			if ( ( $outputMode === SMW_OUTPUT_HTML && $dv->getDataItem() instanceof WikiPage && $dv->getDataItem()->getNamespace() === NS_FILE ) ||
+				( $outputMode === SMW_OUTPUT_HTML && $dv->getDataItem() instanceof Blob ) ) {
 				// Too lazy to handle the Parser object and besides the Message
 				// parse does the job and ensures no other hook is executed
 				$value = Message::get(
@@ -365,7 +362,7 @@ class TableResultPrinter extends ResultPrinter {
 	/**
 	 * @see ResultPrinter::getResources
 	 */
-	protected function getResources() {
+	protected function getResources(): array {
 		$class = isset( $this->params['class'] ) ? $this->params['class'] : '';
 
 		if ( strpos( $class, 'datatable' ) === false ) {
@@ -388,7 +385,7 @@ class TableResultPrinter extends ResultPrinter {
 		];
 	}
 
-	private function addDataTableAttrs( $res, $headerList, &$tableAttrs ) {
+	private function addDataTableAttrs( QueryResult $res, array $headerList, array &$tableAttrs ): void {
 		$tableAttrs['width'] = '100%';
 		$tableAttrs['style'] = 'opacity:.0; display:none;';
 

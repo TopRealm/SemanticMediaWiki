@@ -2,7 +2,6 @@
 
 namespace SMW\SQLStore\QueryEngine;
 
-use Onoi\Tesa\SanitizerFactory;
 use SMW\Services\ServicesFactory as ApplicationFactory;
 use SMW\SQLStore\QueryEngine\Fulltext\MySQLValueMatchConditionBuilder;
 use SMW\SQLStore\QueryEngine\Fulltext\SearchTable;
@@ -29,7 +28,7 @@ class FulltextSearchTableFactory {
 	 *
 	 * @return ValueMatchConditionBuilder
 	 */
-	public function newValueMatchConditionBuilderByType( Store $store ) {
+	public function newValueMatchConditionBuilderByType( Store $store ): MySQLValueMatchConditionBuilder|SQLiteValueMatchConditionBuilder|ValueMatchConditionBuilder {
 		$type = $store->getConnection( 'mw.db' )->getType();
 
 		switch ( $type ) {
@@ -51,14 +50,12 @@ class FulltextSearchTableFactory {
 	/**
 	 * @since 2.5
 	 *
-	 * @return SearchTable
+	 * @return TextSanitizer
 	 */
-	public function newTextSanitizer() {
+	public function newTextSanitizer(): TextSanitizer {
 		$settings = ApplicationFactory::getInstance()->getSettings();
 
-		$textSanitizer = new TextSanitizer(
-			new SanitizerFactory()
-		);
+		$textSanitizer = new TextSanitizer();
 
 		$textSanitizer->setLanguageDetection(
 			$settings->get( 'smwgFulltextLanguageDetection' )
@@ -78,7 +75,7 @@ class FulltextSearchTableFactory {
 	 *
 	 * @return SearchTable
 	 */
-	public function newSearchTable( Store $store ) {
+	public function newSearchTable( Store $store ): SearchTable {
 		$settings = ApplicationFactory::getInstance()->getSettings();
 
 		$searchTable = new SearchTable(
@@ -111,7 +108,7 @@ class FulltextSearchTableFactory {
 	 *
 	 * @return SearchTableUpdater
 	 */
-	public function newSearchTableUpdater( Store $store ) {
+	public function newSearchTableUpdater( Store $store ): SearchTableUpdater {
 		return new SearchTableUpdater(
 			$store->getConnection( 'mw.db' ),
 			$this->newSearchTable( $store ),
@@ -126,7 +123,7 @@ class FulltextSearchTableFactory {
 	 *
 	 * @return TextChangeUpdater
 	 */
-	public function newTextChangeUpdater( Store $store ) {
+	public function newTextChangeUpdater( Store $store ): TextChangeUpdater {
 		$applicationFactory = ApplicationFactory::getInstance();
 		$settings = $applicationFactory->getSettings();
 
@@ -158,7 +155,7 @@ class FulltextSearchTableFactory {
 	 *
 	 * @return SearchTableRebuilder
 	 */
-	public function newSearchTableRebuilder( Store $store ) {
+	public function newSearchTableRebuilder( Store $store ): SearchTableRebuilder {
 		return new SearchTableRebuilder(
 			$store->getConnection( 'mw.db' ),
 			$this->newSearchTableUpdater( $store )

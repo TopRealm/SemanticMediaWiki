@@ -2,6 +2,7 @@
 
 namespace SMW\Utils;
 
+use Iterator;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
 use RecursiveRegexIterator;
@@ -16,28 +17,14 @@ use RuntimeException;
  */
 class FileFetcher {
 
-	/**
-	 * @var string
-	 */
-	private $dir = '';
+	private int $maxDepth = -1;
 
-	/**
-	 * @var int
-	 */
-	private $maxDepth = -1;
-
-	/**
-	 * @var string
-	 */
-	private $sort;
+	private ?string $sort = null;
 
 	/**
 	 * @since 3.1
-	 *
-	 * @param string $dir
 	 */
-	public function __construct( string $dir = '' ) {
-		$this->dir = $dir;
+	public function __construct( private string $dir = '' ) {
 	}
 
 	/**
@@ -45,7 +32,7 @@ class FileFetcher {
 	 *
 	 * @param string $dir
 	 */
-	public function setDir( $dir ) {
+	public function setDir( string $dir ): void {
 		$this->dir = $dir;
 	}
 
@@ -54,7 +41,7 @@ class FileFetcher {
 	 *
 	 * @param string $sort
 	 */
-	public function sort( $sort ) {
+	public function sort( $sort ): void {
 		$sort = strtolower( $sort );
 
 		if ( in_array( $sort, [ 'asc', 'desc' ] ) ) {
@@ -69,7 +56,7 @@ class FileFetcher {
 	 *
 	 * @return string
 	 */
-	public static function normalize( $file ) {
+	public static function normalize( $file ): string {
 		return str_replace( [ '\\', '//', '/', '\\\\' ], DIRECTORY_SEPARATOR, $file );
 	}
 
@@ -78,7 +65,7 @@ class FileFetcher {
 	 *
 	 * @param int $maxDepth
 	 */
-	public function setMaxDepth( int $maxDepth ) {
+	public function setMaxDepth( int $maxDepth ): void {
 		$this->maxDepth = $maxDepth;
 	}
 
@@ -87,9 +74,9 @@ class FileFetcher {
 	 *
 	 * @param string $extension
 	 *
-	 * @return Iterator
+	 * @return Iterator|array
 	 */
-	public function findByExtension( $extension ) {
+	public function findByExtension( string $extension ): RegexIterator|array {
 		if ( !is_dir( $this->dir ) ) {
 			throw new RuntimeException( "Unable to access {$this->dir}!" );
 		}
@@ -120,11 +107,11 @@ class FileFetcher {
 		return $matches;
 	}
 
-	private function sort_asc( $a, $b ) {
+	private function sort_asc( $a, $b ): int {
 		return strnatcasecmp( $a[0], $b[0] );
 	}
 
-	private function sort_desc( $a, $b ) {
+	private function sort_desc( $a, $b ): int {
 		return strnatcasecmp( $b[0], $a[0] );
 	}
 
