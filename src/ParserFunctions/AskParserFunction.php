@@ -136,13 +136,15 @@ class AskParserFunction {
 	 * @todo $rawParams should be of IParameterFormatter
 	 * QueryParameterFormatter class
 	 *
+	 * Note: Datatable in SRF can return array
+	 *
 	 * @since 1.9
 	 *
 	 * @param array $functionParams
 	 *
 	 * @return string|null
 	 */
-	public function parse( array $functionParams ): ?string {
+	public function parse( array $functionParams ) {
 		// Do we still need this?
 		// Reference found in SRF_Exhibit.php, SRF_Ploticus.php, SRF_Timeline.php, SRF_JitGraph.php
 		$GLOBALS['smwgIQRunningNumber']++;
@@ -263,7 +265,8 @@ class AskParserFunction {
 			$contextPage
 		);
 
-		if ( ( $result = $this->hasReachedExpensiveExecutionLimit( $query ) ) !== false ) {
+		$result = $this->hasReachedExpensiveExecutionLimit( $query );
+		if ( $result !== false ) {
 			return $result;
 		}
 
@@ -361,7 +364,7 @@ class AskParserFunction {
 	}
 
 	private function hasReachedExpensiveExecutionLimit( $query ) {
-		if ( $this->expensiveFuncExecutionWatcher->hasReachedExpensiveLimit( $query ) === false ) {
+		if ( !$this->expensiveFuncExecutionWatcher->hasReachedExpensiveLimit( $query ) ) {
 			return false;
 		}
 
@@ -415,7 +418,8 @@ class AskParserFunction {
 
 		foreach ( $errors as $error ) {
 
-			if ( ( $property = $processingErrorMsgHandler->grepPropertyFromRestrictionErrorMsg( $error ) ) === null ) {
+			$property = $processingErrorMsgHandler->grepPropertyFromRestrictionErrorMsg( $error );
+			if ( $property === null ) {
 				$property = new Property( '_ASK' );
 			}
 

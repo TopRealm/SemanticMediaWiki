@@ -2,6 +2,7 @@
 
 namespace SMW\SPARQLStore;
 
+use LogicException;
 use MediaWiki\MediaWikiServices;
 use MediaWiki\Title\Title;
 use SMW\DataItems\DataItem;
@@ -9,12 +10,15 @@ use SMW\DataItems\Property;
 use SMW\DataItems\WikiPage;
 use SMW\DataModel\SemanticData;
 use SMW\Export\Exporter;
+use SMW\Exporter\Element\ExpElement;
 use SMW\Exporter\Element\ExpNsResource;
 use SMW\Exporter\Serializer\TurtleSerializer;
+use SMW\Lookup\ListLookup;
 use SMW\Options;
 use SMW\Query\Query;
 use SMW\Query\QueryResult;
 use SMW\SPARQLStore\Exception\HttpEndpointConnectionException;
+use SMW\SQLStore\PropertyTableInfoFetcher;
 use SMW\SQLStore\Rebuilder\Rebuilder;
 use SMW\SQLStore\SQLStore;
 use SMW\Store;
@@ -63,11 +67,8 @@ class SPARQLStore extends Store {
 	 */
 	public function __construct( ?Store $baseStore = null ) {
 		$this->factory = new SPARQLStoreFactory( $this );
-		$this->baseStore = $baseStore;
 
-		if ( $this->baseStore === null ) {
-			$this->baseStore = $this->factory->getBaseStore( self::$baseStoreClass );
-		}
+		$this->baseStore = $baseStore ?? $this->factory->getBaseStore( self::$baseStoreClass );
 
 		$this->connectionManager = $this->factory->getConnectionManager();
 	}
@@ -132,12 +133,23 @@ class SPARQLStore extends Store {
 	/**
 	 * @see Store::changeTitle()
 	 * @since 1.6
+	 *
+	 * @return void
+	 * @throws LogicException
 	 */
 	public function changeTitle( Title $oldtitle, Title $newtitle, $pageid, $redirid = 0 ): void {
 		$oldWikiPage = WikiPage::newFromTitle( $oldtitle );
 		$newWikiPage = WikiPage::newFromTitle( $newtitle );
 		$oldExpResource = Exporter::getInstance()->newExpElement( $oldWikiPage );
 		$newExpResource = Exporter::getInstance()->newExpElement( $newWikiPage );
+
+		if (
+			!$oldExpResource instanceof ExpElement ||
+			!$newExpResource instanceof ExpElement
+		) {
+			throw new LogicException( 'Expected ExpElement' );
+		}
+
 		$namespaces = [ $oldExpResource->getNamespaceId() => $oldExpResource->getNamespace() ];
 		$namespaces[$newExpResource->getNamespaceId()] = $newExpResource->getNamespace();
 		$oldUri = TurtleSerializer::getTurtleNameForExpElement( $oldExpResource );
@@ -182,6 +194,9 @@ class SPARQLStore extends Store {
 	 * @since 2.0
 	 *
 	 * @param SemanticData $semanticData
+	 *
+	 * @return void
+	 * @throws HttpEndpointConnectionException
 	 */
 	public function doSparqlDataUpdate( SemanticData $semanticData ): void {
 		$connection = $this->getConnection( 'sparql' );
@@ -260,6 +275,11 @@ class SPARQLStore extends Store {
 		$exporter = Exporter::getInstance();
 
 		$expResource = $exporter->newExpElement( $dataItem );
+
+		if ( !$expResource instanceof ExpElement ) {
+			throw new LogicException( 'Expected ExpElement' );
+		}
+
 		$resourceUri = TurtleSerializer::getTurtleNameForExpElement( $expResource );
 
 		if ( $expResource instanceof ExpNsResource ) {
@@ -283,6 +303,8 @@ class SPARQLStore extends Store {
 	 *
 	 * @see Store::getQueryResult
 	 * @since 1.6
+	 *
+	 * @return mixed
 	 */
 	public function getQueryResult( Query $query ) {
 		// Use a fallback QueryEngine in case the QueryEndpoint is inaccessible
@@ -318,7 +340,7 @@ class SPARQLStore extends Store {
 	 * @see Store::getPropertiesSpecial()
 	 * @since 1.8
 	 */
-	public function getPropertiesSpecial( $requestoptions = null ) {
+	public function getPropertiesSpecial( $requestoptions = null ): ListLookup {
 		return $this->baseStore->getPropertiesSpecial( $requestoptions );
 	}
 
@@ -326,7 +348,7 @@ class SPARQLStore extends Store {
 	 * @see Store::getUnusedPropertiesSpecial()
 	 * @since 1.8
 	 */
-	public function getUnusedPropertiesSpecial( $requestoptions = null ) {
+	public function getUnusedPropertiesSpecial( $requestoptions = null ): ListLookup {
 		return $this->baseStore->getUnusedPropertiesSpecial( $requestoptions );
 	}
 
@@ -334,7 +356,7 @@ class SPARQLStore extends Store {
 	 * @see Store::getWantedPropertiesSpecial()
 	 * @since 1.8
 	 */
-	public function getWantedPropertiesSpecial( $requestoptions = null ) {
+	public function getWantedPropertiesSpecial( $requestoptions = null ): ListLookup {
 		return $this->baseStore->getWantedPropertiesSpecial( $requestoptions );
 	}
 

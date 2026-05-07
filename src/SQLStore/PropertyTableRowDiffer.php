@@ -56,7 +56,7 @@ class PropertyTableRowDiffer {
 	/**
 	 * @since 3.0
 	 *
-	 * @return ChangeOp
+	 * @return ChangeOp|null
 	 */
 	public function getChangeOp(): ?ChangeOp {
 		return $this->changeOp;
@@ -193,14 +193,12 @@ class PropertyTableRowDiffer {
 
 				// #3849
 				// Check the table that wasn't part of the old and new hash
-				$row = $connection->selectRow(
-					$propertyTable->getName(),
-					's_id',
-					[
-						's_id' => $sid
-					],
-					__METHOD__
-				);
+				$row = $connection->newSelectQueryBuilder()
+					->select( 's_id' )
+					->from( $propertyTable->getName() )
+					->where( [ 's_id' => $sid ] )
+					->caller( __METHOD__ )
+					->fetchRow();
 
 				// Find and remove any remnants (ghosts) from possible failed
 				// updates that weren't rollback correctly
@@ -272,12 +270,12 @@ class PropertyTableRowDiffer {
 		$contents = [];
 		$connection = $this->store->getConnection( 'mw.db' );
 
-		$result = $connection->select(
-			$propertyTable->getName(),
-			'*',
-			[ 's_id' => $sid ],
-			__METHOD__
-		);
+		$result = $connection->newSelectQueryBuilder()
+			->select( '*' )
+			->from( $propertyTable->getName() )
+			->where( [ 's_id' => $sid ] )
+			->caller( __METHOD__ )
+			->fetchResultSet();
 
 		foreach ( $result as $row ) {
 			if ( is_object( $row ) ) {

@@ -293,7 +293,7 @@ class ConceptCacheRebuilder {
 	private function countDown( int $seconds ): void {
 		for ( $i = $seconds; $i >= 0; $i-- ) {
 			if ( $i != $seconds ) {
-				echo str_repeat( "\x08", strlen( $i + 1 ) );
+				echo str_repeat( "\x08", strlen( (string)( $i + 1 ) ) );
 			}
 			echo $i;
 			flush();
@@ -304,8 +304,9 @@ class ConceptCacheRebuilder {
 		echo "\n";
 	}
 
-	private function getCacheDateInfo( $date ): string {
-		return date( 'Y-m-d H:i:s', $date ) . ' (' . floor( ( strtotime( 'now' ) - $date ) / 60 ) . ' minutes old)';
+	private function getCacheDateInfo( string|int $date ): string {
+		$timestamp = (int)$date;
+		return date( 'Y-m-d H:i:s', $timestamp ) . ' (' . floor( ( strtotime( 'now' ) - $timestamp ) / 60 ) . ' minutes old)';
 	}
 
 }

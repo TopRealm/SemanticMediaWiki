@@ -91,12 +91,12 @@ class RepositoryConnectionProvider implements ConnectionProvider {
 	 *
 	 * @since 2.0
 	 *
-	 * @return SparqlDatabase
+	 * @return RepositoryConnection
 	 * @throws RuntimeException
 	 */
 	public function getConnection(): RepositoryConnection {
 		if ( $this->connection === null ) {
-			$this->connection = $this->connectTo( strtolower( $this->connectorId ) );
+			$this->connection = $this->connectTo( strtolower( (string)$this->connectorId ) );
 		}
 
 		return $this->connection;

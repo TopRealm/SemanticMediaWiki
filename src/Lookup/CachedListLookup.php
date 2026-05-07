@@ -1,8 +1,9 @@
 <?php
 
-namespace SMW\SQLStore\Lookup;
+namespace SMW\Lookup;
 
 use Onoi\Cache\Cache;
+use SMW\SQLStore\Lookup\UsageStatisticsListLookup;
 use stdClass;
 
 /**
@@ -45,14 +46,15 @@ class CachedListLookup implements ListLookup {
 
 	/**
 	 * @since 2.2
-	 *
-	 * @return array
 	 */
-	public function fetchList() {
+	public function fetchList(): array {
 		[ $key, $optionsKey ] = $this->getCacheKey( $this->listLookup->getHash() );
 
-		if ( $this->cacheOptions->useCache && ( ( $result = $this->tryFetchFromCache( $key, $optionsKey ) ) !== null ) ) {
-			return $result;
+		if ( $this->cacheOptions->useCache ) {
+			$result = $this->tryFetchFromCache( $key, $optionsKey );
+			if ( $result !== null ) {
+				return $result;
+			}
 		}
 
 		$list = $this->listLookup->fetchList();
@@ -78,8 +80,6 @@ class CachedListLookup implements ListLookup {
 
 	/**
 	 * @since 2.2
-	 *
-	 * @return bool
 	 */
 	public function isFromCache(): bool {
 		return $this->isFromCache;
@@ -96,10 +96,8 @@ class CachedListLookup implements ListLookup {
 
 	/**
 	 * @since 2.2
-	 *
-	 * @return string
 	 */
-	public function getHash() {
+	public function getHash(): string {
 		return $this->listLookup->getHash();
 	}
 
@@ -164,11 +162,11 @@ class CachedListLookup implements ListLookup {
 		$this->cache->save( $optionsKey, serialize( $data ), $ttl );
 	}
 
-	private function getCacheKey( string $id ): array {
+	private function getCacheKey( ?string $id ): array {
 		$optionsKey = '';
 
 		if ( strpos( $id ?? '', '#' ) !== false ) {
-			[ $id, $optionsKey ] = explode( '#', $id, 2 );
+			[ $id, $optionsKey ] = explode( '#', $id ?? '', 2 );
 		}
 
 		return [
@@ -178,3 +176,8 @@ class CachedListLookup implements ListLookup {
 	}
 
 }
+
+/**
+ * @deprecated since 7.0.0, use \SMW\Lookup\CachedListLookup
+ */
+class_alias( CachedListLookup::class, 'SMW\SQLStore\Lookup\CachedListLookup' );

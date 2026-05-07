@@ -694,7 +694,7 @@
 	"log-show-hide-smw": "Dnevnik Semantičnega MediaWikija $1",
 	"logeventslist-smw-log": "Dnevnik Semantičnega MediaWikija",
 	"log-description-smw": "Dejavnosti za [https://www.semantic-mediawiki.org/wiki/Help:Logging omogočene vrste dogodkov], o katerih poročajo Semantični MediaWiki in njegove komponente.",
-	"logentry-smw-maintenance": "Dogodki, povezani z vzdrževanjem, ki jih oddaja Semantični MediaWiki",
+	"logentry-smw-maintenance": "$1 {{GENDER:$2|je opravil|je opravila|je opravil_a}} vzdrževanje",
 	"smw-datavalue-import-unknown-namespace": "Imenski prostor uvoza »$1« ni znan. Zagotovite, da so podatki o uvozu OWL na voljo na [[MediaWiki:Smw import $1]].",
 	"smw-datavalue-import-missing-namespace-uri": "V [[MediaWiki:Smw import $1|uvozu $1]] ni mogoče najti URI-ja imenskega prostora.",
 	"smw-datavalue-import-missing-type": "Za »$1« ni bila v [[MediaWiki:Smw import $2|uvozu $2]] najdena nobena definicija tipa.",
@@ -952,7 +952,7 @@
 	"apihelp-browsebysubject-summary": "Modul API za pridobivanje informacij o temi.",
 	"apihelp-smwtask-summary": "Modul API za izvajanje opravil, povezanih s Semantićnim MediaWikijem (samo za interno uporabo, ne za javno uporabo).",
 	"apihelp-smwbrowse-summary": "Modul API za podporo dejavnosti brskanja za različne vrste entitet v Semantičnem MediaWikiju.",
-	"apihelp-ask-parameter-api-version": "Oblikovanje izhoda:\n;2:Vzvratno združljiva oblika z uporabo {} za seznam zadetkov.\n;3:Poskusna oblika z uporabo [] za seznam zadetkov.",
+	"apihelp-ask-param-api-version": "Oblikovanje izhoda:\n;2:Vzvratno združljiva oblika z uporabo {} za seznam zadetkov.\n;3:Poskusna oblika z uporabo [] za seznam zadetkov.",
 	"apihelp-smwtask-param-task": "Določa vrsto opravila",
 	"apihelp-smwtask-param-params": "Parametri, kodirani z JSON, ki ustrezajo zahtevi za izbrano vrsto opravila",
 	"smw-apihelp-smwtask-example-update": "Zgled izvajanja opravila posodabljanja za določen predmet:",
@@ -1122,5 +1122,6 @@
 	"smw-specials-facetedsearch-helplink": "https://www.semantic-mediawiki.org/wiki/Help:Special:FacetedSearch",
 	"smw-search-placeholder": "Iskanje&nbsp;...",
 	"smw-listingcontinuesabbrev": "nadalj.",
-	"smw-showingresults": "Prikazujem do '''$1''' {{PLURAL:$1|zadetek|zadetka|zadetke|zadetkov}}, začenši s št. '''$2'''."
+	"smw-showingresults": "Prikazujem do '''$1''' {{PLURAL:$1|zadetek|zadetka|zadetke|zadetkov}}, začenši s št. '''$2'''.",
+	"smw-showingresults-cursor": "Spodaj je  {{PLURAL:$1|prikazan do <strong>1</strong> rezultat|sta prikazana do <strong>$1</strong> rezultata|so prikazani do <strong>$1</strong> rezultati|je prikazano do <strong>$1</strong> rezultatov}}."
 }

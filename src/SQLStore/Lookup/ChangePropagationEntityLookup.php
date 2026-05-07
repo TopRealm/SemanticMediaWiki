@@ -131,7 +131,7 @@ class ChangePropagationEntityLookup {
 	private function fetchOtherReferencesOnTypePropagation( Property $property ) {
 		// Find other references only on a type propagation (which causes a
 		// change of table/id assignments) for entity references
-		if ( $this->isTypePropagation === false ) {
+		if ( !$this->isTypePropagation ) {
 			return [];
 		}
 
@@ -147,16 +147,16 @@ class ChangePropagationEntityLookup {
 		foreach ( $dataItemTables as $tableName ) {
 
 			// Select any references that are hidden or remained active
-			$rows = $connection->select(
-				$tableName,
-				[
+			$rows = $connection->newSelectQueryBuilder()
+				->select( [
 					's_id'
-				],
-				[
+				] )
+				->from( $tableName )
+				->where( [
 					'p_id' => $pid
-				],
-				__METHOD__
-			);
+				] )
+				->caller( __METHOD__ )
+				->fetchResultSet();
 
 			foreach ( $rows as $row ) {
 				$idList[] = $row->s_id;

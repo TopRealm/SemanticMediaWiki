@@ -17,15 +17,7 @@ use SMW\Utils\CliMsgFormatter;
  * Load the required class
  */
 // @codeCoverageIgnoreStart
-// Ensure MediaWiki install path is available for CLI runs
-if ( getenv( 'MW_INSTALL_PATH' ) === false ) {
-    putenv( 'MW_INSTALL_PATH=/www/wwwroot/MediaWiki' );
-}
-if ( getenv( 'MW_INSTALL_PATH' ) !== false ) {
-	require_once getenv( 'MW_INSTALL_PATH' ) . '/maintenance/Maintenance.php';
-} else {
-	require_once __DIR__ . '/../../../maintenance/Maintenance.php';
-}
+require_once __DIR__ . '/_mw_bootstrap.php';
 // @codeCoverageIgnoreEnd
 
 /**
@@ -96,8 +88,6 @@ class setupStore extends Maintenance {
 
 	/**
 	 * @since 3.0
-	 *
-	 * @param MessageReporter $messageReporter
 	 */
 	public function setMessageReporter( MessageReporter $messageReporter ) {
 		$this->messageReporter = $messageReporter;
@@ -192,6 +182,7 @@ class setupStore extends Maintenance {
 	protected function loadGlobalFunctions() {
 		global $smwgIP;
 
+		// @phan-suppress-next-line MediaWikiNoIssetIfDefined
 		if ( !isset( $smwgIP ) ) {
 			$smwgIP = __DIR__ . '/../';
 		}

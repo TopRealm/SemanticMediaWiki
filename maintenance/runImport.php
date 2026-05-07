@@ -12,15 +12,7 @@ use SMW\Utils\CliMsgFormatter;
  * Load the required class
  */
 // @codeCoverageIgnoreStart
-// Ensure MediaWiki install path is available for CLI runs
-if ( getenv( 'MW_INSTALL_PATH' ) === false ) {
-    putenv( 'MW_INSTALL_PATH=/www/wwwroot/MediaWiki' );
-}
-if ( getenv( 'MW_INSTALL_PATH' ) !== false ) {
-	require_once getenv( 'MW_INSTALL_PATH' ) . '/maintenance/Maintenance.php';
-} else {
-	require_once __DIR__ . '/../../../maintenance/Maintenance.php';
-}
+require_once __DIR__ . '/_mw_bootstrap.php';
 // @codeCoverageIgnoreEnd
 
 /**
@@ -46,8 +38,6 @@ class runImport extends Maintenance {
 
 	/**
 	 * @since 3.2
-	 *
-	 * @param MessageReporter $messageReporter
 	 */
 	public function setMessageReporter( MessageReporter $messageReporter ) {
 		$this->messageReporter = $messageReporter;
@@ -66,7 +56,8 @@ class runImport extends Maintenance {
 	 * @see Maintenance::execute
 	 */
 	public function execute() {
-		if ( ( $maintenanceCheck = new MaintenanceCheck() )->canExecute() === false ) {
+		$maintenanceCheck = new MaintenanceCheck();
+		if ( !$maintenanceCheck->canExecute() ) {
 			exit( $maintenanceCheck->getMessage() );
 		}
 

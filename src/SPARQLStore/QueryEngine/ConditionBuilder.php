@@ -19,6 +19,7 @@ use SMW\Query\Language\Description;
 use SMW\SPARQLStore\QueryEngine\Condition\Condition;
 use SMW\SPARQLStore\QueryEngine\Condition\SingletonCondition;
 use SMW\SPARQLStore\QueryEngine\Condition\TrueCondition;
+use SMW\SPARQLStore\QueryEngine\DescriptionInterpreters\DispatchingDescriptionInterpreter;
 use SMW\Utils\CircularReferenceGuard;
 
 /**
@@ -161,7 +162,7 @@ class ConditionBuilder {
 	/**
 	 * @since 2.2
 	 *
-	 * @return CircularReferenceGuard
+	 * @return CircularReferenceGuard|null
 	 */
 	public function getCircularReferenceGuard(): ?CircularReferenceGuard {
 		return $this->circularReferenceGuard;
@@ -179,7 +180,7 @@ class ConditionBuilder {
 	/**
 	 * @since 2.3
 	 *
-	 * @return HierarchyLookup
+	 * @return HierarchyLookup|null
 	 */
 	public function getHierarchyLookup(): ?HierarchyLookup {
 		return $this->hierarchyLookup;
@@ -318,10 +319,10 @@ class ConditionBuilder {
 	 * Create an Condition from an empty (true) description.
 	 * May still require helper conditions for ordering.
 	 *
-	 * @param $joinVariable string name, see mapDescriptionToCondition()
-	 * @param $orderByProperty mixed DIProperty or null, see mapDescriptionToCondition()
+	 * @param string $joinVariable string name, see mapDescriptionToCondition()
+	 * @param mixed $orderByProperty mixed Property or null, see mapDescriptionToCondition()
 	 *
-	 * @return Condition
+	 * @return TrueCondition
 	 */
 	public function newTrueCondition( string $joinVariable, $orderByProperty ): TrueCondition {
 		$result = new TrueCondition();
@@ -358,7 +359,7 @@ class ConditionBuilder {
 
 		// Add unknow redirect target/variable for value
 		if ( !isset( $this->redirectByVariableReplacementMap[$valueName] ) ) {
-
+			$namespaces = [];
 			$namespaces[$redirectExpElement->getNamespaceId()] = $redirectExpElement->getNamespace();
 			$redirectByVariable = '?' . $this->getNextVariable( 'r' );
 
@@ -406,7 +407,12 @@ class ConditionBuilder {
 	 * @param mixed $orderByProperty DIProperty or null
 	 * @param int $diType DataItem type id if known, or DataItem::TYPE_NOTYPE to determine it from the property
 	 */
-	public function addOrderByDataForProperty( Condition &$sparqlCondition, string $mainVariable, $orderByProperty, $diType = DataItem::TYPE_NOTYPE ): void {
+	public function addOrderByDataForProperty(
+		Condition &$sparqlCondition,
+		string $mainVariable,
+		$orderByProperty,
+		$diType = DataItem::TYPE_NOTYPE
+	): void {
 		if ( $orderByProperty === null ) {
 			return;
 		}
@@ -590,6 +596,7 @@ class ConditionBuilder {
 	 */
 	private function addFilterToRemoveEntitiesThatContainRedirectPredicate( Condition &$condition ): void {
 		$rediExpElement = Exporter::getInstance()->getSpecialPropertyResource( '_REDI' );
+		$namespaces = [];
 		$namespaces[$rediExpElement->getNamespaceId()] = $rediExpElement->getNamespace();
 
 		$boundVariable = '?' . $this->getNextVariable( 'o' );

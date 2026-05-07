@@ -47,7 +47,7 @@
 		"composer/installers": "^2.2.0|^1.0.1",
 		"param-processor/param-processor": "~1.2",
 		"serialization/serialization": "~3.2|~4.0",
-		"onoi/message-reporter": "~1.0",
+		"jeroen/message-reporter": "~1.0",
 		"onoi/cache": "~1.2",
 		"onoi/event-dispatcher": "~1.0",
 		"onoi/blob-store": "~1.2",
@@ -68,6 +68,7 @@
 	},
 	"autoload": {
 		"files": [
+			"src/Defines.php",
 			"src/enableSemantics.php"
 		]
 	},
@@ -88,6 +89,7 @@
 			"@lint",
 			"@phpcs",
 			"minus-x check .",
+			"@phan",
 			"@phpunit:unit",
 			"@phpunit:integration"
 		],

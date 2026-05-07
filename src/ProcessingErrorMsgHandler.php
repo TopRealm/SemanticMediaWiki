@@ -83,9 +83,12 @@ class ProcessingErrorMsgHandler {
 
 			$exists = false;
 
-			if ( is_string( $message ) && ( $decodedMessage = Message::decode( $message, $type, $language ) ) !== false ) {
-				$message = $decodedMessage;
-				$exists = true;
+			if ( is_string( $message ) ) {
+				$decodedMessage = Message::decode( $message, $type, $language );
+				if ( $decodedMessage !== false ) {
+					$message = $decodedMessage;
+					$exists = true;
+				}
 			}
 
 			if ( !$exists && is_string( $message ) && wfMessage( $message )->exists() ) {
@@ -243,7 +246,7 @@ class ProcessingErrorMsgHandler {
 		}
 	}
 
-	private function newContainerSemanticData( $hash ): ContainerSemanticData {
+	private function newContainerSemanticData( string $hash ): ContainerSemanticData {
 		if ( $this->subject === null ) {
 			$containerSemanticData = ContainerSemanticData::makeAnonymousContainer();
 			$containerSemanticData->skipAnonymousCheck();
