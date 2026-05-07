@@ -14,15 +14,13 @@ $mwInstallPath = getenv( 'MW_INSTALL_PATH' );
 
 // Try to include from MW_INSTALL_PATH if valid; otherwise fall back to the
 // conventional relative path used by extensions shipped under extensions/
+$maintenanceFilePath = __DIR__ . '/../../../maintenance/Maintenance.php';
 if ( $mwInstallPath !== false && $mwInstallPath !== '' ) {
-    $maintenanceFilePath = rtrim( $mwInstallPath, DIRECTORY_SEPARATOR ) . '/maintenance/Maintenance.php';
-    if ( is_file( $maintenanceFilePath ) ) {
-        require_once $maintenanceFilePath;
-    } else {
-        require_once __DIR__ . '/../../../maintenance/Maintenance.php';
-    }
-} else {
-    require_once __DIR__ . '/../../../maintenance/Maintenance.php';
+	$candidateMaintenanceFilePath = rtrim( $mwInstallPath, DIRECTORY_SEPARATOR ) . '/maintenance/Maintenance.php';
+	if ( is_file( $candidateMaintenanceFilePath ) ) {
+		$maintenanceFilePath = $candidateMaintenanceFilePath;
+	}
 }
+require_once $maintenanceFilePath;
 
 // @codeCoverageIgnoreEnd
