@@ -11,11 +11,7 @@ use SMW\SQLStore\SQLStore;
  * Load the required class
  */
 // @codeCoverageIgnoreStart
-if ( getenv( 'MW_INSTALL_PATH' ) !== false ) {
-	require_once getenv( 'MW_INSTALL_PATH' ) . '/maintenance/Maintenance.php';
-} else {
-	require_once __DIR__ . '/../../../maintenance/Maintenance.php';
-}
+require_once __DIR__ . '/_mw_bootstrap.php';
 // @codeCoverageIgnoreEnd
 
 /**
