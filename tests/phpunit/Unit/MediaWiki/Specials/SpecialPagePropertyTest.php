@@ -21,6 +21,7 @@ use SMW\Tests\TestEnvironment;
 class SpecialPagePropertyTest extends TestCase {
 
 	private $testEnvironment;
+	private $store;
 	private $stringValidator;
 
 	protected function setUp(): void {
@@ -28,16 +29,15 @@ class SpecialPagePropertyTest extends TestCase {
 
 		$this->testEnvironment = new TestEnvironment();
 
-		$store = $this->getMockBuilder( SQLStore::class )
+		$this->store = $this->getMockBuilder( SQLStore::class )
 			->disableOriginalConstructor()
 			->setMethods( [ 'getPropertyValues', 'service' ] )
 			->getMock();
 
-		$store->expects( $this->any() )
+		$this->store->expects( $this->any() )
 			->method( 'getPropertyValues' )
 			->willReturn( [] );
 
-		$this->testEnvironment->registerObject( 'Store', $store );
 		$this->stringValidator = $this->testEnvironment->newValidatorFactory()->newStringValidator();
 	}
 
@@ -49,7 +49,7 @@ class SpecialPagePropertyTest extends TestCase {
 	public function testCanConstruct() {
 		$this->assertInstanceOf(
 			SpecialPageProperty::class,
-			new SpecialPageProperty()
+			new SpecialPageProperty( $this->store )
 		);
 	}
 
@@ -57,7 +57,7 @@ class SpecialPagePropertyTest extends TestCase {
 	 * @dataProvider queryParameterProvider
 	 */
 	public function testQueryParameter( $query, $expected ) {
-		$instance = new SpecialPageProperty();
+		$instance = new SpecialPageProperty( $this->store );
 
 		$instance->getContext()->setTitle(
 			MediaWikiServices::getInstance()->getTitleFactory()->newFromText( 'PageProperty' )
@@ -81,7 +81,7 @@ class SpecialPagePropertyTest extends TestCase {
 			'value="Has subobject"', 'value="Bar"'
 		];
 
-		$instance = new SpecialPageProperty();
+		$instance = new SpecialPageProperty( $this->store );
 
 		$instance->getContext()->setTitle(
 			MediaWikiServices::getInstance()->getTitleFactory()->newFromText( 'PageProperty' )

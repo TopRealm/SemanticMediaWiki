@@ -2,7 +2,9 @@
 
 namespace SMW\Tests\Integration\Maintenance;
 
+use MediaWiki\MediaWikiServices;
 use SMW\Tests\SMWIntegrationTestCase;
+use SMW\Tests\Utils\SMWDeclarativeHookReseater;
 
 /**
  * @group semantic-mediawiki-integration
@@ -24,9 +26,23 @@ class SetupStoreMaintenanceTest extends SMWIntegrationTestCase {
 	protected function setUp(): void {
 		parent::setUp();
 
-		$this->runnerFactory  = $this->testEnvironment->getUtilityFactory()->newRunnerFactory();
-		$this->titleValidator = $this->testEnvironment->getUtilityFactory()->newValidatorFactory()->newTitleValidator();
-		$this->spyMessageReporter = $this->testEnvironment->getUtilityFactory()->newSpyMessageReporter();
+		// Disable every SMW declarative hook during the XML import so a
+		// previous testSetupStore_Delete (which drops SMW tables) does not
+		// leave a later setUp's import firing SMW handlers (ParserAfterTidy,
+		// LinksUpdateComplete, etc.) against missing tables. clearHook
+		// auto-restores in tearDown.
+		$reseater = new SMWDeclarativeHookReseater(
+			MediaWikiServices::getInstance()->getHookContainer()
+		);
+		foreach ( $reseater->getDeclarativeHookNames() as $hook ) {
+			$this->clearHook( $hook );
+		}
+
+		$utilityFactory = $this->testEnvironment->getUtilityFactory();
+
+		$this->runnerFactory  = $utilityFactory->newRunnerFactory();
+		$this->titleValidator = $utilityFactory->newValidatorFactory()->newTitleValidator();
+		$this->spyMessageReporter = $utilityFactory->newSpyMessageReporter();
 
 		$importRunner = $this->runnerFactory->newXmlImportRunner(
 			__DIR__ . '/../../Fixtures/Maintenance/test-import-19.7.xml'

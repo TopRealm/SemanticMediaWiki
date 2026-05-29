@@ -2,6 +2,7 @@
 
 namespace SMW\SQLStore\QueryEngine;
 
+use MediaWiki\Logger\LoggerFactory;
 use SMW\Services\ServicesFactory as ApplicationFactory;
 use SMW\SQLStore\QueryEngine\Fulltext\MySQLValueMatchConditionBuilder;
 use SMW\SQLStore\QueryEngine\Fulltext\SearchTable;
@@ -130,11 +131,12 @@ class FulltextSearchTableFactory {
 		$textChangeUpdater = new TextChangeUpdater(
 			$store->getConnection( 'mw.db' ),
 			$applicationFactory->getCache(),
-			$this->newSearchTableUpdater( $store )
+			$this->newSearchTableUpdater( $store ),
+			$applicationFactory->newJobFactory()
 		);
 
 		$textChangeUpdater->setLogger(
-			$applicationFactory->getMediaWikiLogger()
+			LoggerFactory::getInstance( 'smw' )
 		);
 
 		$textChangeUpdater->asDeferredUpdate(

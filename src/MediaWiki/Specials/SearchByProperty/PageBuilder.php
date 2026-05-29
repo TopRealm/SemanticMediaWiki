@@ -4,6 +4,7 @@ namespace SMW\MediaWiki\Specials\SearchByProperty;
 
 use MediaWiki\Html\Html;
 use MediaWiki\Linker\Linker;
+use MediaWiki\Message\Message;
 use SMW\DataItems\Error;
 use SMW\DataItems\Property;
 use SMW\DataItems\WikiPage;
@@ -12,10 +13,9 @@ use SMW\DataValueFactory;
 use SMW\DataValues\DataValue;
 use SMW\DataValues\StringValue;
 use SMW\Formatters\Infolink;
-use SMW\MediaWiki\MessageBuilder;
 use SMW\MediaWiki\Renderer\HtmlFormRenderer;
 use SMW\ProcessingErrorMsgHandler;
-use SMW\Services\ServicesFactory as ApplicationFactory;
+use SMW\Store;
 
 /**
  * @license GPL-2.0-or-later
@@ -27,8 +27,6 @@ use SMW\Services\ServicesFactory as ApplicationFactory;
  * @author mwjames
  */
 class PageBuilder {
-
-	private ?MessageBuilder $messageBuilder = null;
 
 	/**
 	 * @var Linker
@@ -42,8 +40,20 @@ class PageBuilder {
 		private readonly HtmlFormRenderer $htmlFormRenderer,
 		private readonly PageRequestOptions $pageRequestOptions,
 		private readonly QueryResultLookup $queryResultLookup,
+		private readonly Store $store,
 	) {
 		$this->linker = smwfGetLinker();
+	}
+
+	/**
+	 * Build a message in the renderer's language so the form labels match the
+	 * surrounding form's language (`HtmlFormRenderer` is constructed with the
+	 * page's content language by default) rather than defaulting to the user
+	 * language.
+	 */
+	private function msg( string $key, ...$params ): Message {
+		return wfMessage( $key, ...$params )
+			->inLanguage( $this->htmlFormRenderer->getLanguage() );
 	}
 
 	/**
@@ -51,7 +61,6 @@ class PageBuilder {
 	 */
 	public function getHtml(): string {
 		$this->pageRequestOptions->initialize();
-		$this->messageBuilder = $this->htmlFormRenderer->getMessageBuilder();
 
 		[ $resultMessage, $resultList, $resultCount ] = $this->getResultHtml();
 
@@ -64,19 +73,19 @@ class PageBuilder {
 		}
 
 		if ( $resultList === '' || $resultList === null ) {
-			$resultList = $this->messageBuilder->getMessage( 'smw_result_noresults' )->text();
+			$resultList = $this->msg( 'smw_result_noresults' )->escaped();
 		}
 
 		$pageDescription = Html::rawElement(
 			'p',
 			[ 'class' => 'smw-sp-searchbyproperty-description' ],
-			$this->messageBuilder->getMessage( 'smw-sp-searchbyproperty-description' )->parse()
+			$this->msg( 'smw-sp-searchbyproperty-description' )->parse()
 		);
 
 		$resultListHeader = Html::element(
 			'h2',
 			[],
-			$this->messageBuilder->getMessage( 'smw-sp-searchbyproperty-resultlist-header' )->text()
+			$this->msg( 'smw-sp-searchbyproperty-resultlist-header' )->text()
 		);
 
 		return $pageDescription . $this->getHtmlForm( $resultMessage, $resultCount ) . $resultListHeader . $resultList;
@@ -97,18 +106,18 @@ class PageBuilder {
 				$resultCount )
 			->addHorizontalRule()
 			->addInputField(
-				$this->messageBuilder->getMessage( 'smw_sbv_property' )->text(),
+				$this->msg( 'smw_sbv_property' )->text(),
 				'property',
 				$this->pageRequestOptions->propertyString,
 				'smw-property-input' )
 			->addNonBreakingSpace()
 			->addInputField(
-				$this->messageBuilder->getMessage( 'smw_sbv_value' )->text(),
+				$this->msg( 'smw_sbv_value' )->text(),
 				'value',
 				$this->pageRequestOptions->valueString,
 				'smw-value-input' )
 			->addNonBreakingSpace()
-			->addSubmitButton( $this->messageBuilder->getMessage( 'smw_sbv_submit' )->text() )
+			->addSubmitButton( $this->msg( 'smw_sbv_submit' )->text() )
 			->getForm();
 
 		return $html;
@@ -119,7 +128,7 @@ class PageBuilder {
 		$resultMessage = '';
 
 		if ( $this->pageRequestOptions->propertyString === '' || !$this->pageRequestOptions->propertyString ) {
-			return [ $this->messageBuilder->getMessage( 'smw_sbv_docu' )->text(), '', 0 ];
+			return [ $this->msg( 'smw_sbv_docu' )->text(), '', 0 ];
 		}
 
 		// #1728
@@ -152,7 +161,7 @@ class PageBuilder {
 			$resultMessageKey = 'smw-sp-searchbyproperty-valuequery';
 		}
 
-		$resultMessage = $this->messageBuilder->getMessage(
+		$resultMessage = $this->msg(
 			$resultMessageKey,
 			$this->pageRequestOptions->property->getShortHTMLText( $this->linker ),
 			$this->pageRequestOptions->value->getShortHTMLText( $this->linker ) )->text();
@@ -202,7 +211,7 @@ class PageBuilder {
 			return [ '', $resultList, 0 ];
 		}
 
-		$resultMessage = $this->messageBuilder->getMessage(
+		$resultMessage = $this->msg(
 			'smw_sbv_displayresultfuzzy',
 			$this->pageRequestOptions->property->getShortHTMLText( $this->linker ),
 			htmlspecialchars( $this->pageRequestOptions->value->getShortHTMLText( $this->linker ) )
@@ -211,7 +220,7 @@ class PageBuilder {
 		$resultList .= $this->makeResultList( $smallerResults, $smallerCount, false );
 
 		if ( $exactCount == 0 ) {
-			$resultList .= "&#160;<em><strong><small>" . $this->messageBuilder->getMessage( 'parentheses' )
+			$resultList .= "&#160;<em><strong><small>" . $this->msg( 'parentheses' )
 				->rawParams( $this->pageRequestOptions->value->getLongHTMLText() )
 				->escaped() . "</small></strong></em>";
 		} else {
@@ -278,7 +287,7 @@ class PageBuilder {
 				$outputFormat = $result[1]->getOutputFormat();
 				$result[1]->setOutputFormat( $outputFormat ?: 'LOCL' );
 
-				$listitem .= "&#160;<em><small>" . $this->messageBuilder->getMessage( 'parentheses' )
+				$listitem .= "&#160;<em><small>" . $this->msg( 'parentheses' )
 					->rawParams( $result[1]->getLongHTMLText( $this->linker ) )
 					->escaped() . "</small></em>";
 			}
@@ -312,7 +321,7 @@ class PageBuilder {
 		$resultCount = 0;
 		$extra = '';
 
-		$dataItem = ApplicationFactory::getInstance()->getStore()->getPropertyTableIdReferenceFinder()->tryToFindAtLeastOneReferenceForProperty(
+		$dataItem = $this->store->getPropertyTableIdReferenceFinder()->tryToFindAtLeastOneReferenceForProperty(
 			$property
 		);
 

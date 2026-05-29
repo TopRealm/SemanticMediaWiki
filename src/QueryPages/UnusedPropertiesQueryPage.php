@@ -173,16 +173,17 @@ class UnusedPropertiesQueryPage extends QueryPage {
 			}
 
 		} else {
-			$typeDataValue = TypesValue::newFromTypeId( $property->findPropertyTypeID() );
+			$typeDataValue = TypesValue::newFromTypeId( $property->findPropertyValueType() );
 			$propertyLink  = DataValueFactory::getInstance()
 				->newDataValueByItem( $property, null )
 				->getShortHtmlText( $this->getLinker() );
 		}
 
-		return $this->msg(
-			'smw-unusedproperty-template', $propertyLink,
-			$typeDataValue->getLongHTMLText( $this->getLinker() )
-		)->text() . ' ' . $this->getMessageFormatter()->getHtml();
+		return $this->msg( 'smw-unusedproperty-template' )
+			->rawParams(
+				$propertyLink,
+				$typeDataValue->getLongHTMLText( $this->getLinker() )
+			)->escaped() . ' ' . $this->getMessageFormatter()->getHtml();
 	}
 
 	/**

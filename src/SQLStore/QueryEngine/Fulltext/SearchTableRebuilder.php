@@ -208,7 +208,7 @@ class SearchTableRebuilder {
 		}
 
 		$this->reportMessage(
-			$cliMsgFormatter->secondCol( count( $propertyTables ) )
+			$cliMsgFormatter->secondCol( (string)count( $propertyTables ) )
 		);
 
 		foreach ( $propertyTables as $propertyTable ) {
@@ -287,7 +287,7 @@ class SearchTableRebuilder {
 			->caller( __METHOD__ )
 			->fetchResultSet();
 
-		if ( $rows === false || $rows === null ) {
+		if ( !$rows->numRows() ) {
 			$this->skippedTables[$table] = '[EMPTY]';
 			return $this->skippedTables[$table];
 		}

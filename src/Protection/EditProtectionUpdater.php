@@ -11,7 +11,6 @@ use SMW\DataItems\Property;
 use SMW\DataModel\SemanticData;
 use SMW\Localizer\Message;
 use SMW\MediaWiki\Hooks\ArticleProtectComplete;
-use SMW\MediaWiki\PageInfoProvider;
 use SMW\Property\Annotators\EditProtectedPropertyAnnotator;
 use WikiPage;
 
@@ -91,10 +90,6 @@ class EditProtectionUpdater implements LoggerAwareInterface {
 
 		$title = $this->wikiPage->getTitle();
 
-		if ( $title === null ) {
-			return;
-		}
-
 		$restrictionStore = MediaWikiServices::getInstance()->getRestrictionStore();
 		$restrictions = array_flip( $restrictionStore->getRestrictions( $title, 'edit' ) );
 
@@ -110,7 +105,7 @@ class EditProtectionUpdater implements LoggerAwareInterface {
 			return;
 		}
 
-		if ( (bool)$isEditProtected === PageInfoProvider::isProtected( $title, 'edit' ) ) {
+		if ( (bool)$isEditProtected === $restrictionStore->isProtected( $title, 'edit' ) ) {
 			$this->log( __METHOD__ . ' Status already set, no update required' );
 			return;
 		}
@@ -167,8 +162,6 @@ class EditProtectionUpdater implements LoggerAwareInterface {
 			];
 		} else {
 			$this->log( __METHOD__ . ' remove protection on edit, move' );
-			$protections = [];
-			$expiry = [];
 		}
 
 		$reason = Message::get( 'smw-edit-protection-auto-update' );

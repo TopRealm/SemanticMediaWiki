@@ -9,8 +9,10 @@ use MediaWiki\Title\Title;
 use MediaWiki\User\Options\UserOptionsLookup;
 use MediaWiki\User\User;
 use PHPUnit\Framework\TestCase;
+use Skin;
 use SMW\MediaWiki\Hooks\BeforePageDisplay;
-use SMW\Tests\TestEnvironment;
+use SMW\Settings;
+use SMW\SetupFile;
 
 /**
  * @covers \SMW\MediaWiki\Hooks\BeforePageDisplay
@@ -27,9 +29,10 @@ class BeforePageDisplayTest extends TestCase {
 	private $request;
 	private $skin;
 	private $title;
+	private $settings;
 
 	private UserOptionsLookup $userOptionsLookup;
-	private TestEnvironment $testEnvironment;
+	private SetupFile $setupFile;
 
 	protected function setUp(): void {
 		$this->title = $this->getMockBuilder( Title::class )
@@ -56,7 +59,7 @@ class BeforePageDisplayTest extends TestCase {
 			->method( 'getTitle' )
 			->willReturn( $this->title );
 
-		$this->skin = $this->getMockBuilder( '\Skin' )
+		$this->skin = $this->getMockBuilder( Skin::class )
 			->disableOriginalConstructor()
 			->getMock();
 
@@ -65,23 +68,22 @@ class BeforePageDisplayTest extends TestCase {
 			->willReturn( $requestContext );
 
 		$this->userOptionsLookup = $this->createMock( UserOptionsLookup::class );
-		$this->testEnvironment = new TestEnvironment();
-		$this->testEnvironment->registerObject( 'UserOptionsLookup', $this->userOptionsLookup );
-	}
-
-	protected function tearDown(): void {
-		$this->testEnvironment->tearDown();
-		parent::tearDown();
+		$this->settings = $this->createMock( Settings::class );
+		$this->setupFile = $this->createMock( SetupFile::class );
 	}
 
 	public function testCanConstruct() {
 		$this->assertInstanceOf(
 			BeforePageDisplay::class,
-			new BeforePageDisplay()
+			new BeforePageDisplay( $this->userOptionsLookup, $this->settings, $this->setupFile )
 		);
 	}
 
 	public function testInformAboutExtensionAvailability() {
+		if ( defined( 'SMW_EXTENSION_LOADED' ) ) {
+			$this->markTestSkipped( 'SMW_EXTENSION_LOADED is defined globally' );
+		}
+
 		$this->title->expects( $this->once() )
 			->method( 'isSpecial' )
 			->with( 'Version' )
@@ -90,31 +92,18 @@ class BeforePageDisplayTest extends TestCase {
 		$this->outputPage->expects( $this->once() )
 			->method( 'prependHTML' );
 
-		$instance = new BeforePageDisplay();
-
-		$instance->setOptions(
-			[
-				'SMW_EXTENSION_LOADED' => false
-			]
-		);
-
-		$instance->informAboutExtensionAvailability( $this->outputPage );
+		BeforePageDisplay::informAboutExtensionAvailability( $this->outputPage );
 	}
 
 	public function testIgnoreInformAboutExtensionAvailability() {
+		$GLOBALS['smwgIgnoreExtensionRegistrationCheck'] = true;
+
 		$this->outputPage->expects( $this->never() )
 			->method( 'prependHTML' );
 
-		$instance = new BeforePageDisplay();
+		BeforePageDisplay::informAboutExtensionAvailability( $this->outputPage );
 
-		$instance->setOptions(
-			[
-				'SMW_EXTENSION_LOADED' => false,
-				'smwgIgnoreExtensionRegistrationCheck' => true
-			]
-		);
-
-		$instance->informAboutExtensionAvailability( $this->outputPage );
+		$GLOBALS['smwgIgnoreExtensionRegistrationCheck'] = false;
 	}
 
 	public function testModules() {
@@ -134,65 +123,9 @@ class BeforePageDisplayTest extends TestCase {
 			->method( 'getUser' )
 			->willReturn( $user );
 
-		$instance = new BeforePageDisplay();
+		$instance = new BeforePageDisplay( $this->userOptionsLookup, $this->settings, $this->setupFile );
 
-		$instance->process( $this->outputPage, $this->skin );
-	}
-
-	public function testPrependHTML_IncompleteTasks() {
-		$user = $this->getMockBuilder( User::class )
-			->disableOriginalConstructor()
-			->getMock();
-
-		$this->outputPage->expects( $this->atLeastOnce() )
-			->method( 'prependHTML' );
-
-		$this->outputPage->expects( $this->atLeastOnce() )
-			->method( 'getUser' )
-			->willReturn( $user );
-
-		$instance = new BeforePageDisplay();
-
-		$instance->setOptions(
-			[
-				'incomplete_tasks' => [ 'Foo', 'Bar' ]
-			]
-		);
-
-		$instance->process( $this->outputPage, $this->skin );
-	}
-
-	public function testEmptyPrependHTML_IncompleteTasks_DisallowedSpecialPages() {
-		$user = $this->getMockBuilder( User::class )
-			->disableOriginalConstructor()
-			->getMock();
-
-		$this->title->expects( $this->any() )
-			->method( 'isSpecialPage' )
-			->willReturn( true );
-
-		$this->title->expects( $this->any() )
-			->method( 'isSpecial' )
-			->with( 'Userlogin' )
-			->willReturn( true );
-
-		$this->outputPage->expects( $this->once() )
-			->method( 'prependHTML' )
-			->with( '' );
-
-		$this->outputPage->expects( $this->atLeastOnce() )
-			->method( 'getUser' )
-			->willReturn( $user );
-
-		$instance = new BeforePageDisplay();
-
-		$instance->setOptions(
-			[
-				'incomplete_tasks' => [ 'Foo', 'Bar' ]
-			]
-		);
-
-		$instance->process( $this->outputPage, $this->skin );
+		$instance->onBeforePageDisplay( $this->outputPage, $this->skin );
 	}
 
 	/**
@@ -220,17 +153,13 @@ class BeforePageDisplayTest extends TestCase {
 		$this->outputPage->expects( $expected )
 			->method( 'addLink' );
 
-		$instance = new BeforePageDisplay();
+		$this->settings->method( 'get' )
+			->with( 'smwgEnableExportRDFLink' )
+			->willReturn( true );
 
-		$instance->setOptions(
-			[
-				'smwgEnableExportRDFLink' => true
-			]
-		);
+		$instance = new BeforePageDisplay( $this->userOptionsLookup, $this->settings, $this->setupFile );
 
-		$this->assertTrue(
-			$instance->process( $this->outputPage, $this->skin )
-		);
+		$instance->onBeforePageDisplay( $this->outputPage, $this->skin );
 	}
 
 	public function titleDataProvider() {

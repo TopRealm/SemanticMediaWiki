@@ -47,12 +47,7 @@ class InterwikiDBIntegrationTest extends SMWIntegrationTestCase {
 		$this->queryResultValidator = $utilityFactory->newValidatorFactory()->newQueryResultValidator();
 		$this->queryParser = ApplicationFactory::getInstance()->getQueryFactory()->newQueryParser();
 
-		$utilityFactory->newMwHooksHandler()
-			->deregisterListedHooks()
-			->invokeHooksFromRegistry();
-
 		// Register a test interwiki prefix via the interwiki cache.
-		// Must be set after deregisterListedHooks()/invokeHooksFromRegistry().
 		$this->oldInterwikiCache = $GLOBALS['wgInterwikiCache'] ?? false;
 		$GLOBALS['wgInterwikiCache'] = ClassicInterwikiLookup::buildCdbHash( [
 			[

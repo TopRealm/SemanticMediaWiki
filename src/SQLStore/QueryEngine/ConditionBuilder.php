@@ -158,7 +158,8 @@ class ConditionBuilder {
 	/**
 	 * @since 2.2
 	 *
-	 * @param string $error
+	 * @param string|array $error
+	 * @param int|string|null $type
 	 */
 	public function addError( $error, $type = Message::TEXT ): void {
 		$this->errors[Message::getHash( $error, $type )] = Message::encode( $error, $type );
@@ -185,10 +186,13 @@ class ConditionBuilder {
 			$rootSegment
 		);
 
-		// compile query, build query "plan"
-		$qid = $this->buildFromDescription(
-			$query->getDescription()
-		);
+		$qid = -1;
+
+		$description = $query->getDescription();
+		if ( $description !== null ) {
+			// compile query, build query "plan"
+			$qid = $this->buildFromDescription( $description );
+		}
 
 		// no valid/supported condition; ensure that at least only proper pages
 		// are delivered

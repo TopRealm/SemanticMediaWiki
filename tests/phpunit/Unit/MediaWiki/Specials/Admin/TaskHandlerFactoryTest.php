@@ -2,9 +2,11 @@
 
 namespace SMW\Tests\Unit\MediaWiki\Specials\Admin;
 
+use MediaWiki\HookContainer\HookContainer;
 use MediaWiki\User\User;
 use PHPUnit\Framework\TestCase;
-use SMW\MediaWiki\HookDispatcher;
+use SMW\MediaWiki\JobFactory;
+use SMW\MediaWiki\JobQueue;
 use SMW\MediaWiki\Renderer\HtmlFormRenderer;
 use SMW\MediaWiki\Specials\Admin\Alerts\DeprecationNoticeTaskHandler;
 use SMW\MediaWiki\Specials\Admin\AlertsTaskHandler;
@@ -38,17 +40,19 @@ use SMW\Tests\TestEnvironment;
 class TaskHandlerFactoryTest extends TestCase {
 
 	private $testEnvironment;
-	private $hookDispatcher;
+	private $hookContainer;
 	private $store;
 	private $htmlFormRenderer;
 	private $outputFormatter;
+	private $jobFactory;
+	private $jobQueue;
 
 	protected function setUp(): void {
 		parent::setUp();
 
 		$this->testEnvironment = new TestEnvironment();
 
-		$this->hookDispatcher = $this->getMockBuilder( HookDispatcher::class )
+		$this->hookContainer = $this->getMockBuilder( HookContainer::class )
 			->disableOriginalConstructor()
 			->getMock();
 
@@ -64,13 +68,19 @@ class TaskHandlerFactoryTest extends TestCase {
 			->disableOriginalConstructor()
 			->getMock();
 
-		$this->testEnvironment->registerObject( 'Store', $this->store );
+		$this->jobFactory = $this->getMockBuilder( JobFactory::class )
+			->disableOriginalConstructor()
+			->getMock();
+
+		$this->jobQueue = $this->getMockBuilder( JobQueue::class )
+			->disableOriginalConstructor()
+			->getMock();
 	}
 
 	public function testCanConstruct() {
 		$this->assertInstanceOf(
 			TaskHandlerFactory::class,
-			new TaskHandlerFactory( $this->store, $this->htmlFormRenderer, $this->outputFormatter )
+			new TaskHandlerFactory( $this->store, $this->htmlFormRenderer, $this->outputFormatter, $this->jobFactory, $this->jobQueue )
 		);
 	}
 
@@ -84,11 +94,13 @@ class TaskHandlerFactoryTest extends TestCase {
 		$instance = new TaskHandlerFactory(
 			$this->store,
 			$this->htmlFormRenderer,
-			$this->outputFormatter
+			$this->outputFormatter,
+			$this->jobFactory,
+			$this->jobQueue
 		);
 
-		$instance->setHookDispatcher(
-			$this->hookDispatcher
+		$instance->setHookContainer(
+			$this->hookContainer
 		);
 
 		$this->assertInstanceOf(
@@ -104,7 +116,9 @@ class TaskHandlerFactoryTest extends TestCase {
 		$instance = new TaskHandlerFactory(
 			$this->store,
 			$this->htmlFormRenderer,
-			$this->outputFormatter
+			$this->outputFormatter,
+			$this->jobFactory,
+			$this->jobQueue
 		);
 
 		$this->assertInstanceOf(

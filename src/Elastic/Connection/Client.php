@@ -111,7 +111,7 @@ class Client {
 
 		// Modify settings on-the-fly
 		if ( $this->options->dotGet( "settings.$type", [] ) !== [] ) {
-			$definition = json_decode( $indexDef[$type], true );
+			$definition = (array)json_decode( $indexDef[$type], true );
 
 			$error = json_last_error();
 			if ( $error !== JSON_ERROR_NONE ) {
@@ -611,10 +611,7 @@ class Client {
 		}
 
 		$this->logger->info(
-			[
-				'Search',
-				'{query}, queryTime: {procTime}'
-			],
+			'Search {query}, queryTime: {procTime}',
 			[
 				'method' => __METHOD__,
 				'role' => 'user',

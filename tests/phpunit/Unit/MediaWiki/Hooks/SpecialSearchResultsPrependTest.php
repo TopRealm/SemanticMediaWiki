@@ -3,12 +3,13 @@
 namespace SMW\Tests\Unit\MediaWiki\Hooks;
 
 use MediaWiki\Output\OutputPage;
+use MediaWiki\User\Options\UserOptionsLookup;
 use MediaWiki\User\User;
 use PHPUnit\Framework\TestCase;
 use SMW\Localizer\MessageLocalizer;
 use SMW\MediaWiki\Hooks\SpecialSearchResultsPrepend;
-use SMW\MediaWiki\Preference\PreferenceExaminer;
 use SMW\MediaWiki\Search\ExtendedSearchEngine;
+use SpecialSearch;
 
 /**
  * @covers \SMW\MediaWiki\Hooks\SpecialSearchResultsPrepend
@@ -21,11 +22,16 @@ use SMW\MediaWiki\Search\ExtendedSearchEngine;
  */
 class SpecialSearchResultsPrependTest extends TestCase {
 
-	private $preferenceExaminer;
+	private $userOptionsLookup;
+	private $user;
 	private $messageLocalizer;
 
 	protected function setUp(): void {
-		$this->preferenceExaminer = $this->getMockBuilder( PreferenceExaminer::class )
+		$this->userOptionsLookup = $this->getMockBuilder( UserOptionsLookup::class )
+			->disableOriginalConstructor()
+			->getMock();
+
+		$this->user = $this->getMockBuilder( User::class )
 			->disableOriginalConstructor()
 			->getMock();
 
@@ -35,24 +41,16 @@ class SpecialSearchResultsPrependTest extends TestCase {
 	}
 
 	public function testCanConstruct() {
-		$specialSearch = $this->getMockBuilder( '\SpecialSearch' )
-			->disableOriginalConstructor()
-			->getMock();
-
-		$outputPage = $this->getMockBuilder( OutputPage::class )
-			->disableOriginalConstructor()
-			->getMock();
-
 		$this->assertInstanceOf(
 			SpecialSearchResultsPrepend::class,
-			new SpecialSearchResultsPrepend( $this->preferenceExaminer, $specialSearch, $outputPage )
+			new SpecialSearchResultsPrepend( $this->userOptionsLookup )
 		);
 	}
 
 	public function testProcess() {
-		$this->preferenceExaminer->expects( $this->any() )
-			->method( 'hasPreferenceOf' )
-			->willReturnCallback( static function ( $key ) {
+		$this->userOptionsLookup->expects( $this->any() )
+			->method( 'getOption' )
+			->willReturnCallback( static function ( $user, $key ) {
 				return $key === 'smw-prefs-general-options-suggester-textinput';
 			} );
 
@@ -60,11 +58,7 @@ class SpecialSearchResultsPrependTest extends TestCase {
 			->disableOriginalConstructor()
 			->getMock();
 
-		$user = $this->getMockBuilder( User::class )
-			->disableOriginalConstructor()
-			->getMock();
-
-		$specialSearch = $this->getMockBuilder( '\SpecialSearch' )
+		$specialSearch = $this->getMockBuilder( SpecialSearch::class )
 			->disableOriginalConstructor()
 			->getMock();
 
@@ -76,13 +70,15 @@ class SpecialSearchResultsPrependTest extends TestCase {
 			->disableOriginalConstructor()
 			->getMock();
 
+		$outputPage->expects( $this->any() )
+			->method( 'getUser' )
+			->willReturn( $this->user );
+
 		$outputPage->expects( $this->atLeastOnce() )
 			->method( 'addHtml' );
 
 		$instance = new SpecialSearchResultsPrepend(
-			$this->preferenceExaminer,
-			$specialSearch,
-			$outputPage
+			$this->userOptionsLookup
 		);
 
 		$instance->setMessageLocalizer(
@@ -90,14 +86,14 @@ class SpecialSearchResultsPrependTest extends TestCase {
 		);
 
 		$this->assertTrue(
-			$instance->process( '' )
+			$instance->onSpecialSearchResultsPrepend( $specialSearch, $outputPage, '' )
 		);
 	}
 
 	public function testProcess_DisabledInfo() {
-		$this->preferenceExaminer->expects( $this->any() )
-			->method( 'hasPreferenceOf' )
-			->willReturnCallback( static function ( $key ) {
+		$this->userOptionsLookup->expects( $this->any() )
+			->method( 'getOption' )
+			->willReturnCallback( static function ( $user, $key ) {
 				return $key === 'smw-prefs-general-options-disable-search-info';
 			} );
 
@@ -105,11 +101,7 @@ class SpecialSearchResultsPrependTest extends TestCase {
 			->disableOriginalConstructor()
 			->getMock();
 
-		$user = $this->getMockBuilder( User::class )
-			->disableOriginalConstructor()
-			->getMock();
-
-		$specialSearch = $this->getMockBuilder( '\SpecialSearch' )
+		$specialSearch = $this->getMockBuilder( SpecialSearch::class )
 			->disableOriginalConstructor()
 			->getMock();
 
@@ -121,20 +113,22 @@ class SpecialSearchResultsPrependTest extends TestCase {
 			->disableOriginalConstructor()
 			->getMock();
 
+		$outputPage->expects( $this->any() )
+			->method( 'getUser' )
+			->willReturn( $this->user );
+
 		$outputPage->expects( $this->never() )
 			->method( 'addHtml' );
 
 		$instance = new SpecialSearchResultsPrepend(
-			$this->preferenceExaminer,
-			$specialSearch,
-			$outputPage
+			$this->userOptionsLookup
 		);
 
 		$instance->setMessageLocalizer(
 			$this->messageLocalizer
 		);
 
-		$instance->process( '' );
+		$instance->onSpecialSearchResultsPrepend( $specialSearch, $outputPage, '' );
 	}
 
 }

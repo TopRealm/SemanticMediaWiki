@@ -10,6 +10,7 @@ use SMW\Services\ServicesFactory as ApplicationFactory;
 use SMW\Tests\SMWIntegrationTestCase;
 use SMW\Tests\Utils\PageCreator;
 use SMW\Tests\Utils\PageDeleter;
+use SMW\Tests\Utils\SMWDeclarativeHookReseater;
 use SMW\Tests\Utils\UtilityFactory;
 
 /**
@@ -27,17 +28,14 @@ class MediaWikiIntegrationForRegisteredHookTest extends SMWIntegrationTestCase {
 	private $title;
 	private $semanticDataValidator;
 	private $applicationFactory;
-	private $mwHooksHandler;
 	private $pageDeleter;
 
 	protected function setUp(): void {
 		parent::setUp();
 
-		$this->mwHooksHandler = UtilityFactory::getInstance()->newMwHooksHandler();
-
-		$this->mwHooksHandler
-			->deregisterListedHooks()
-			->invokeHooksFromRegistry();
+		( new SMWDeclarativeHookReseater(
+			MediaWikiServices::getInstance()->getHookContainer()
+		) )->reseatDeclarativeHandlers();
 
 		$this->semanticDataValidator = UtilityFactory::getInstance()->newValidatorFactory()->newSemanticDataValidator();
 
@@ -59,7 +57,10 @@ class MediaWikiIntegrationForRegisteredHookTest extends SMWIntegrationTestCase {
 
 	protected function tearDown(): void {
 		$this->applicationFactory->clear();
-		$this->mwHooksHandler->restoreListedHooks();
+
+		( new SMWDeclarativeHookReseater(
+			MediaWikiServices::getInstance()->getHookContainer()
+		) )->reseatDeclarativeHandlers();
 
 		parent::tearDown();
 	}
@@ -69,6 +70,16 @@ class MediaWikiIntegrationForRegisteredHookTest extends SMWIntegrationTestCase {
 		$cache = $cacheFactory->newFixedInMemoryCache();
 
 		$this->applicationFactory->registerObject( 'Cache', $cache );
+
+		// reseatDeclarativeHandlers() in setUp() already built ArticlePurge
+		// with the default Cache. Reset the cached SMW.Cache MediaWikiServices
+		// entry and reseat so the next ObjectFactory pass resolves the
+		// test's fixed-memory cache via the service wiring's hasTestOverride
+		// branch.
+		MediaWikiServices::getInstance()->resetServiceForTesting( 'SMW.Cache' );
+		( new SMWDeclarativeHookReseater(
+			MediaWikiServices::getInstance()->getHookContainer()
+		) )->reseatDeclarativeHandlers();
 
 		$this->title = MediaWikiServices::getInstance()->getTitleFactory()->newFromText( __METHOD__ );
 

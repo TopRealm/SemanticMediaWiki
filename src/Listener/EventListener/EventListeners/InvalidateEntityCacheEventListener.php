@@ -2,10 +2,10 @@
 
 namespace SMW\Listener\EventListener\EventListeners;
 
-use Onoi\EventDispatcher\DispatchContext;
-use Onoi\EventDispatcher\EventListener;
 use Psr\Log\LoggerAwareTrait;
 use SMW\EntityCache;
+use SMW\EventDispatcher\DispatchContext;
+use SMW\EventDispatcher\EventListener;
 
 /**
  * @license GPL-2.0-or-later
@@ -43,8 +43,12 @@ class InvalidateEntityCacheEventListener implements EventListener {
 		$this->entityCache->invalidate( $subject );
 
 		$this->logger->info(
-			[ 'Event', 'InvalidateEntityCache', "{caused_by}", "{id}" ],
-			[ 'role' => 'user', 'caused_by' => $context, 'id' => $id ]
+			'Event InvalidateEntityCache {caused_by} {id}',
+			[
+				'role' => 'user',
+				'caused_by' => $context,
+				'id' => $id
+			]
 		);
 	}
 

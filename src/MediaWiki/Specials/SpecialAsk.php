@@ -3,6 +3,7 @@
 namespace SMW\MediaWiki\Specials;
 
 use MediaWiki\Html\Html;
+use MediaWiki\MediaWikiServices;
 use MediaWiki\SpecialPage\SpecialPage;
 use ParamProcessor\ProcessedParam;
 use SMW\Formatters\Infolink;
@@ -24,7 +25,7 @@ use SMW\Query\QuerySourceFactory;
 use SMW\Query\RemoteRequest;
 use SMW\Query\Result\StringResult;
 use SMW\Query\ResultPrinterDependency;
-use SMW\Services\ServicesFactory as ApplicationFactory;
+use SMW\Settings;
 use SMW\Utils\HtmlModal;
 use SMW\Utils\UrlArgs;
 
@@ -43,8 +44,6 @@ use SMW\Utils\UrlArgs;
  */
 class SpecialAsk extends SpecialPage {
 
-	private QuerySourceFactory $querySourceFactory;
-
 	private string $queryString = '';
 
 	private array $parameters = [];
@@ -60,9 +59,14 @@ class SpecialAsk extends SpecialPage {
 	 */
 	private array $params = [];
 
-	public function __construct() {
+	/**
+	 * @since 7.0.0
+	 */
+	public function __construct(
+		private readonly QuerySourceFactory $querySourceFactory,
+		private readonly Settings $settings
+	) {
 		parent::__construct( 'Ask' );
-		$this->querySourceFactory = ApplicationFactory::getInstance()->getQuerySourceFactory();
 	}
 
 	/**
@@ -81,7 +85,7 @@ class SpecialAsk extends SpecialPage {
 	 */
 	public function execute( $p ) {
 		$this->setHeaders();
-		$settings = ApplicationFactory::getInstance()->getSettings();
+		$settings = $this->settings;
 
 		$out = $this->getOutput();
 		$request = $this->getRequest();
@@ -151,9 +155,9 @@ class SpecialAsk extends SpecialPage {
 		$out->addHTML( HelpWidget::html() );
 
 		if ( $request->getCheck( 'bHelp' ) ) {
-			$helpLink = $this->msg( $request->getVal( 'bHelp' ) )->escaped();
+			$helpLink = $this->msg( $request->getVal( 'bHelp' ) )->text();
 		} else {
-			$helpLink = $this->msg( 'smw_ask_doculink' )->escaped();
+			$helpLink = $this->msg( 'smw_ask_doculink' )->text();
 		}
 
 		$this->addHelpLink( $helpLink, true );
@@ -203,7 +207,7 @@ class SpecialAsk extends SpecialPage {
 			return $out->addHtml( ErrorWidget::sessionFailure() );
 		}
 
-		$settings = ApplicationFactory::getInstance()->getSettings();
+		$settings = $this->settings;
 
 		NavigationLinksWidget::setMaxInlineLimit(
 			$GLOBALS['smwgQMaxInlineLimit']
@@ -213,7 +217,7 @@ class SpecialAsk extends SpecialPage {
 			$GLOBALS['smwgResultFormats']
 		);
 
-		$userOptionsLookup = ApplicationFactory::getInstance()->singleton( 'UserOptionsLookup' );
+		$userOptionsLookup = MediaWikiServices::getInstance()->getUserOptionsLookup();
 		ParametersWidget::setTooltipDisplay(
 			$userOptionsLookup->getOption( $this->getUser(), 'smw-prefs-ask-options-tooltip-display' )
 		);
@@ -272,7 +276,7 @@ class SpecialAsk extends SpecialPage {
 	protected function makeHTMLResult(): void {
 		$result = '';
 		$res = null;
-		$settings = ApplicationFactory::getInstance()->getSettings();
+		$settings = $this->settings;
 		$queryobj = null;
 
 		$navigation = '';

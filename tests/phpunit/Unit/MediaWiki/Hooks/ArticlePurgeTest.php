@@ -2,11 +2,13 @@
 
 namespace SMW\Tests\Unit\MediaWiki\Hooks;
 
-use Onoi\EventDispatcher\EventDispatcher;
 use PHPUnit\Framework\TestCase;
+use SMW\EventDispatcher\EventDispatcher;
 use SMW\Factbox\CachedFactbox;
 use SMW\MediaWiki\Hooks\ArticlePurge;
 use SMW\Services\ServicesFactory as ApplicationFactory;
+use SMW\Settings;
+use SMW\Store;
 use SMW\Tests\TestEnvironment;
 use SMW\Tests\Utils\Mock\MockTitle;
 use WikiPage;
@@ -39,7 +41,6 @@ class ArticlePurgeTest extends TestCase {
 		$this->testEnvironment = new TestEnvironment( $settings );
 
 		$this->cache = $this->applicationFactory->newCacheFactory()->newFixedInMemoryCache();
-		$this->applicationFactory->registerObject( 'Cache', $this->cache );
 
 		$this->eventDispatcher = $this->getMockBuilder( EventDispatcher::class )
 			->disableOriginalConstructor()
@@ -64,26 +65,17 @@ class ArticlePurgeTest extends TestCase {
 		$wikiPage = new WikiPage( $setup['title'] );
 		$pageId   = $wikiPage->getTitle()->getArticleID();
 
-		$this->testEnvironment->addConfiguration(
-			'smwgAutoRefreshOnPurge',
-			$setup['smwgAutoRefreshOnPurge']
-		);
+		$settings = $this->createMock( Settings::class );
+		$settings->method( 'get' )
+			->willReturnMap( [
+				[ 'smwgAutoRefreshOnPurge', $setup['smwgAutoRefreshOnPurge'] ],
+				[ 'smwgFactboxFeatures', [ 'purge-refresh' ] ],
+				[ 'smwgQueryResultCacheRefreshOnPurge', $setup['smwgQueryResultCacheRefreshOnPurge'] ],
+			] );
 
-		$this->testEnvironment->addConfiguration(
-			'smwgFactboxFeatures',
-			SMW_FACTBOX_PURGE_REFRESH
-		);
+		$store = $this->createMock( Store::class );
 
-		$this->testEnvironment->addConfiguration(
-			'smwgQueryResultCacheRefreshOnPurge',
-			$setup['smwgQueryResultCacheRefreshOnPurge']
-		);
-
-		$instance = new ArticlePurge();
-
-		$instance->setEventDispatcher(
-			$this->eventDispatcher
-		);
+		$instance = new ArticlePurge( $store, $this->cache, $settings, $this->eventDispatcher );
 
 		$cacheFactory = $this->applicationFactory->newCacheFactory();
 		$factboxCacheKey = CachedFactbox::makeCacheKey( $pageId );
@@ -109,7 +101,7 @@ class ArticlePurgeTest extends TestCase {
 			'Asserts that before processing ...'
 		);
 
-		$result = $instance->process( $wikiPage );
+		$result = $instance->onArticlePurge( $wikiPage );
 
 		// Post-process check
 		$this->assertTrue(

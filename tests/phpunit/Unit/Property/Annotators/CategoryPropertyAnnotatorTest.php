@@ -28,6 +28,8 @@ class CategoryPropertyAnnotatorTest extends TestCase {
 	private $semanticDataFactory;
 	private $semanticDataValidator;
 	private $testEnvironment;
+	private $store;
+	private $pageCreator;
 
 	protected function setUp(): void {
 		parent::setUp();
@@ -37,11 +39,13 @@ class CategoryPropertyAnnotatorTest extends TestCase {
 		$this->semanticDataFactory = $this->testEnvironment->getUtilityFactory()->newSemanticDataFactory();
 		$this->semanticDataValidator = $this->testEnvironment->getUtilityFactory()->newValidatorFactory()->newSemanticDataValidator();
 
-		$store = $this->getMockBuilder( Store::class )
+		$this->store = $this->getMockBuilder( Store::class )
 			->disableOriginalConstructor()
 			->getMockForAbstractClass();
 
-		$this->testEnvironment->registerObject( 'Store', $store );
+		$this->pageCreator = $this->getMockBuilder( PageCreator::class )
+			->disableOriginalConstructor()
+			->getMock();
 	}
 
 	protected function tearDown(): void {
@@ -56,7 +60,9 @@ class CategoryPropertyAnnotatorTest extends TestCase {
 
 		$instance = new CategoryPropertyAnnotator(
 			new NullPropertyAnnotator( $semanticData ),
-			[]
+			[],
+			$this->store,
+			$this->pageCreator
 		);
 
 		$this->assertInstanceOf(
@@ -75,7 +81,9 @@ class CategoryPropertyAnnotatorTest extends TestCase {
 
 		$instance = new CategoryPropertyAnnotator(
 			new NullPropertyAnnotator( $semanticData ),
-			$parameters['categories']
+			$parameters['categories'],
+			$this->store,
+			$this->pageCreator
 		);
 
 		$instance->showHiddenCategories(
@@ -116,7 +124,9 @@ class CategoryPropertyAnnotatorTest extends TestCase {
 
 		$instance = new CategoryPropertyAnnotator(
 			new NullPropertyAnnotator( $parserData->getSemanticData() ),
-			$parameters['categories']
+			$parameters['categories'],
+			$this->store,
+			$this->pageCreator
 		);
 
 		$instance->showHiddenCategories(
@@ -136,7 +146,7 @@ class CategoryPropertyAnnotatorTest extends TestCase {
 		);
 
 		$instance->addAnnotation();
-		$parserData->pushSemanticDataToParserOutput();
+		$parserData->copyToParserOutput();
 
 		$parserDataAfterAnnotation = new ParserData( $title, $parserOutput );
 
@@ -172,14 +182,11 @@ class CategoryPropertyAnnotatorTest extends TestCase {
 			->setSubject( new WikiPage( __METHOD__, $parameters['namespace'], '' ) )
 			->newEmptySemanticData();
 
-		$this->testEnvironment->registerObject(
-			'PageCreator',
-			$pageCreator
-		);
-
 		$instance = new CategoryPropertyAnnotator(
 			new NullPropertyAnnotator( $semanticData ),
-			$parameters['categories']
+			$parameters['categories'],
+			$this->store,
+			$pageCreator
 		);
 
 		$instance->showHiddenCategories(
@@ -216,15 +223,15 @@ class CategoryPropertyAnnotatorTest extends TestCase {
 			->method( 'getRedirectTarget' )
 			->willReturn( new WikiPage( 'Foo', NS_MAIN ) );
 
-		$this->testEnvironment->registerObject( 'Store', $store );
-
 		$semanticData = $this->semanticDataFactory
 			->setSubject( new WikiPage( __METHOD__, NS_MAIN ) )
 			->newEmptySemanticData();
 
 		$instance = new CategoryPropertyAnnotator(
 			new NullPropertyAnnotator( $semanticData ),
-			[ 'Bar' ]
+			[ 'Bar' ],
+			$store,
+			$this->pageCreator
 		);
 
 		$instance->useCategoryRedirect(

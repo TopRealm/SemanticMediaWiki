@@ -3,8 +3,8 @@
 namespace SMW\Tests\Unit\MediaWiki\Hooks;
 
 use MediaWiki\MediaWikiServices;
-use Onoi\EventDispatcher\EventDispatcher;
 use PHPUnit\Framework\TestCase;
+use SMW\EventDispatcher\EventDispatcher;
 use SMW\MediaWiki\Hooks\PageMoveComplete;
 use SMW\NamespaceExaminer;
 use SMW\Store;
@@ -26,6 +26,7 @@ class PageMoveCompleteTest extends TestCase {
 	private $testEnvironment;
 	private $namespaceExaminer;
 	private $eventDispatcher;
+	private $store;
 
 	protected function setUp(): void {
 		parent::setUp();
@@ -50,6 +51,10 @@ class PageMoveCompleteTest extends TestCase {
 		$this->eventDispatcher = $this->getMockBuilder( EventDispatcher::class )
 			->disableOriginalConstructor()
 			->getMock();
+
+		$this->store = $this->getMockBuilder( Store::class )
+			->disableOriginalConstructor()
+			->getMockForAbstractClass();
 	}
 
 	protected function tearDown(): void {
@@ -60,7 +65,7 @@ class PageMoveCompleteTest extends TestCase {
 	public function testCanConstruct() {
 		$this->assertInstanceOf(
 			PageMoveComplete::class,
-			new PageMoveComplete( $this->namespaceExaminer )
+			new PageMoveComplete( $this->namespaceExaminer, $this->store, $this->eventDispatcher )
 		);
 	}
 
@@ -77,25 +82,17 @@ class PageMoveCompleteTest extends TestCase {
 		$oldTitle = $titleFactory->newFromText( 'Old' );
 		$newTitle = $titleFactory->newFromText( 'New' );
 
-		$store = $this->getMockBuilder( Store::class )
-			->disableOriginalConstructor()
-			->getMockForAbstractClass();
-
-		$store->expects( $this->never() )
+		$this->store->expects( $this->never() )
 			->method( 'changeTitle' );
 
-		$this->testEnvironment->registerObject( 'Store', $store );
-
 		$instance = new PageMoveComplete(
-			$this->namespaceExaminer
-		);
-
-		$instance->setEventDispatcher(
+			$this->namespaceExaminer,
+			$this->store,
 			$this->eventDispatcher
 		);
 
 		$this->assertTrue(
-			$instance->process( $oldTitle, $newTitle, $this->user, 0, 0 )
+			$instance->onPageMoveComplete( $oldTitle, $newTitle, $this->user, 0, 0, '', null )
 		);
 	}
 
@@ -112,26 +109,71 @@ class PageMoveCompleteTest extends TestCase {
 		$oldTitle = $titleFactory->newFromText( 'Old' );
 		$newTitle = $titleFactory->newFromText( 'New', NS_HELP );
 
-		$store = $this->getMockBuilder( Store::class )
-			->disableOriginalConstructor()
-			->getMockForAbstractClass();
-
-		$store->expects( $this->once() )
+		$this->store->expects( $this->once() )
 			->method( 'deleteSubject' )
 			->with( $oldTitle );
 
-		$this->testEnvironment->registerObject( 'Store', $store );
-
 		$instance = new PageMoveComplete(
-			$this->namespaceExaminer
-		);
-
-		$instance->setEventDispatcher(
+			$this->namespaceExaminer,
+			$this->store,
 			$this->eventDispatcher
 		);
 
 		$this->assertTrue(
-			$instance->process( $oldTitle, $newTitle, $this->user, 0, 0 )
+			$instance->onPageMoveComplete( $oldTitle, $newTitle, $this->user, 0, 0, '', null )
+		);
+	}
+
+	public function testDeleteSubjectWhenMoveLeavesNoRedirect() {
+		$titleFactory = MediaWikiServices::getInstance()->getTitleFactory();
+		$this->namespaceExaminer->expects( $this->once() )
+			->method( 'isSemanticEnabled' )
+			->willReturn( true );
+
+		$oldTitle = $titleFactory->newFromText( 'Old' );
+		$newTitle = $titleFactory->newFromText( 'New' );
+
+		// pageid is non-zero (move succeeded), redirid is zero (no redirect
+		// was left behind). The handler must delete the old subject in this
+		// case so stale annotations do not linger on a now-unreachable title.
+		$this->store->expects( $this->once() )
+			->method( 'deleteSubject' )
+			->with( $oldTitle );
+
+		$instance = new PageMoveComplete(
+			$this->namespaceExaminer,
+			$this->store,
+			$this->eventDispatcher
+		);
+
+		$this->assertTrue(
+			$instance->onPageMoveComplete( $oldTitle, $newTitle, $this->user, 42, 0, '', null )
+		);
+	}
+
+	public function testKeepsSubjectWhenMoveLeavesRedirect() {
+		$titleFactory = MediaWikiServices::getInstance()->getTitleFactory();
+		$this->namespaceExaminer->expects( $this->once() )
+			->method( 'isSemanticEnabled' )
+			->willReturn( true );
+
+		$oldTitle = $titleFactory->newFromText( 'Old' );
+		$newTitle = $titleFactory->newFromText( 'New' );
+
+		// pageid is non-zero AND redirid is non-zero (redirect was created),
+		// so the old subject must NOT be deleted; it now represents the
+		// redirect page.
+		$this->store->expects( $this->never() )
+			->method( 'deleteSubject' );
+
+		$instance = new PageMoveComplete(
+			$this->namespaceExaminer,
+			$this->store,
+			$this->eventDispatcher
+		);
+
+		$this->assertTrue(
+			$instance->onPageMoveComplete( $oldTitle, $newTitle, $this->user, 42, 99, '', null )
 		);
 	}
 

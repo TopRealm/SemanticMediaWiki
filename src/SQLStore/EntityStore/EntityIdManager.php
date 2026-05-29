@@ -14,7 +14,7 @@ use SMW\MediaWiki\Collator;
 use SMW\MediaWiki\Connection\Sequence;
 use SMW\PropertyRegistry;
 use SMW\RequestOptions;
-use SMW\Services\ServicesFactory as ApplicationFactory;
+use SMW\Settings;
 use SMW\SQLStore\Lookup\RedirectTargetLookup;
 use SMW\SQLStore\PropertyTable\PropertyTableHashes;
 use SMW\SQLStore\PropertyTableInfoFetcher;
@@ -127,6 +127,7 @@ class EntityIdManager {
 	public function __construct(
 		SQLStore $store,
 		private readonly SQLStoreFactory $factory,
+		private readonly Settings $settings,
 	) {
 		$this->store = $store;
 		$this->initCache();
@@ -250,7 +251,7 @@ class EntityIdManager {
 			$this->redirectStore = $this->factory->newRedirectStore();
 		}
 
-		$this->redirectStore->updateRedirect( $id, $title, $namespace );
+		$this->redirectStore->updateRedirect( (string)$id, $title, $namespace );
 	}
 
 	/**
@@ -925,7 +926,7 @@ class EntityIdManager {
 	/**
 	 * @since 3.0
 	 *
-	 * @param array $list
+	 * @param array|Iterator $list
 	 * @param string|null $flag
 	 */
 	public function warmUpCache( $list = [], $flag = null ): void {
@@ -974,13 +975,6 @@ class EntityIdManager {
 	 * @return string[]
 	 */
 	public function getDataItemsFromList( array $idlist, ?RequestOptions $requestOptions = null ): MappingIterator|array {
-		return $this->idEntityFinder->getDataItemsFromList( $idlist, $requestOptions );
-	}
-
-	/**
-	 * @deprecated since 3.0, use EntityIdManager::getDataItemsFromList
-	 */
-	public function getDataItemPoolHashListFor( array $idlist, ?RequestOptions $requestOptions = null ): MappingIterator|array {
 		return $this->idEntityFinder->getDataItemsFromList( $idlist, $requestOptions );
 	}
 
@@ -1123,7 +1117,7 @@ class EntityIdManager {
 	}
 
 	private function resolveCacheSizes(): array {
-		$configured = ApplicationFactory::getInstance()->getSettings()->safeGet( 'smwgEntityCacheSizes', [] );
+		$configured = $this->settings->safeGet( 'smwgEntityCacheSizes', [] );
 
 		if ( !is_array( $configured ) || $configured === [] ) {
 			return self::DEFAULT_CACHE_SIZES;

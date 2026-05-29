@@ -3,8 +3,6 @@
 namespace SMW\Tests\Unit\Elastic;
 
 use MediaWiki\Title\Title;
-use Onoi\EventDispatcher\DispatchContext;
-use Onoi\EventDispatcher\Listener\GenericCallbackEventListener;
 use Onoi\MessageReporter\MessageReporter;
 use PHPUnit\Framework\TestCase;
 use SMW\DataItems\WikiPage;
@@ -12,7 +10,6 @@ use SMW\Elastic\Admin\ElasticClientTaskHandler;
 use SMW\Elastic\Config;
 use SMW\Elastic\Connection\Client;
 use SMW\Elastic\Connection\ConnectionProvider;
-use SMW\Elastic\Connection\DummyClient;
 use SMW\Elastic\ElasticFactory;
 use SMW\Elastic\ElasticStore;
 use SMW\Elastic\Hooks\UpdateEntityCollationComplete;
@@ -33,9 +30,9 @@ use SMW\Elastic\QueryEngine\DescriptionInterpreters\NamespaceDescriptionInterpre
 use SMW\Elastic\QueryEngine\DescriptionInterpreters\SomePropertyInterpreter;
 use SMW\Elastic\QueryEngine\DescriptionInterpreters\SomeValueInterpreter;
 use SMW\Elastic\QueryEngine\DescriptionInterpreters\ValueDescriptionInterpreter;
+use SMW\EventDispatcher\DispatchContext;
 use SMW\MediaWiki\Specials\Admin\OutputFormatter;
 use SMW\QueryEngine;
-use SMW\SQLStore\SQLStore;
 use SMW\Store;
 use SMW\Tests\TestEnvironment;
 
@@ -52,6 +49,7 @@ class ElasticFactoryTest extends TestCase {
 
 	private MessageReporter $messageReporter;
 	private $store;
+	private $elasticStore;
 	private $outputFormatter;
 	private $conditionBuilder;
 	private $connection;
@@ -86,15 +84,15 @@ class ElasticFactoryTest extends TestCase {
 			->method( 'getConfig' )
 			->willReturn( $options );
 
-		$store = $this->getMockBuilder( ElasticStore::class )
+		$this->elasticStore = $this->getMockBuilder( ElasticStore::class )
 			->disableOriginalConstructor()
 			->getMock();
 
-		$store->expects( $this->any() )
+		$this->elasticStore->expects( $this->any() )
 			->method( 'getConnection' )
 			->willReturn( $this->connection );
 
-		$this->testEnvironment->registerObject( 'Store', $store );
+		$this->testEnvironment->registerObject( 'Store', $this->elasticStore );
 	}
 
 	protected function tearDown(): void {
@@ -326,28 +324,8 @@ class ElasticFactoryTest extends TestCase {
 		);
 	}
 
-	public function testOnEntityReferenceCleanUpComplete() {
-		$instance = new ElasticFactory();
-
-		$this->assertTrue(
-			$instance->onEntityReferenceCleanUpComplete( $this->store, 42, null, false )
-		);
-	}
-
-	public function testOnRegisterEventListeners() {
-		$instance = new ElasticFactory();
-
-		$eventListener = $this->getMockBuilder( GenericCallbackEventListener::class )
-			->disableOriginalConstructor()
-			->getMock();
-
-		$this->assertTrue(
-			$instance->onRegisterEventListeners( $eventListener )
-		);
-	}
-
 	public function testOnInvalidateEntityCache_OnSubject() {
-		$instance = new ElasticFactory();
+		$instance = new ElasticFactory( $this->elasticStore );
 
 		$subject = $this->getMockBuilder( WikiPage::class )
 			->disableOriginalConstructor()
@@ -366,7 +344,7 @@ class ElasticFactoryTest extends TestCase {
 	}
 
 	public function testOnInvalidateEntityCache_OnTitle() {
-		$instance = new ElasticFactory();
+		$instance = new ElasticFactory( $this->elasticStore );
 
 		$title = $this->getMockBuilder( Title::class )
 			->disableOriginalConstructor()
@@ -389,69 +367,6 @@ class ElasticFactoryTest extends TestCase {
 			->willReturn( $title );
 
 		$instance->onInvalidateEntityCache( $dispatchContext );
-	}
-
-	public function testOnAfterUpdateEntityCollationComplete() {
-		$updateEntityCollationComplete = $this->getMockBuilder( UpdateEntityCollationComplete::class )
-			->disableOriginalConstructor()
-			->getMock();
-
-		$rebuilder = $this->getMockBuilder( Rebuilder::class )
-			->disableOriginalConstructor()
-			->getMock();
-
-		$store = $this->getMockBuilder( SQLStore::class )
-			->disableOriginalConstructor()
-			->getMock();
-
-		$store->expects( $this->atLeastOnce() )
-			->method( 'getConnection' )
-			->willReturn( $this->connection );
-
-		$instance = $this->getMockBuilder( ElasticFactory::class )
-			->disableOriginalConstructor()
-			->setMethods( [ 'newRebuilder', 'newUpdateEntityCollationComplete' ] )
-			->getMock();
-
-		$instance->expects( $this->atLeastOnce() )
-			->method( 'newRebuilder' )
-			->willReturn( $rebuilder );
-
-		$instance->expects( $this->atLeastOnce() )
-			->method( 'newUpdateEntityCollationComplete' )
-			->willReturn( $updateEntityCollationComplete );
-
-		$instance->onAfterUpdateEntityCollationComplete(
-			$store,
-			$this->messageReporter
-		);
-	}
-
-	public function tesOnAfterUpdateEntityCollationComplete_SkipHook() {
-		$connection = $this->getMockBuilder( DummyClient::class )
-			->disableOriginalConstructor()
-			->getMock();
-
-		$store = $this->getMockBuilder( SQLStore::class )
-			->disableOriginalConstructor()
-			->getMock();
-
-		$store->expects( $this->any() )
-			->method( 'getConnection' )
-			->willReturn( $connection );
-
-		$instance = $this->getMockBuilder( ElasticFactory::class )
-			->disableOriginalConstructor()
-			->setMethods( [ 'newRebuilder' ] )
-			->getMock();
-
-		$instance->expects( $this->never() )
-			->method( 'newRebuilder' );
-
-		$instance->onAfterUpdateEntityCollationComplete(
-			$store,
-			$this->messageReporter
-		);
 	}
 
 }

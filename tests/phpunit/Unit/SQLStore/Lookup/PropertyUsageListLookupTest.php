@@ -100,16 +100,6 @@ class PropertyUsageListLookupTest extends TestCase {
 		);
 	}
 
-	public function testTryTofetchListForMissingOptionsThrowsException() {
-		$instance = new PropertyUsageListLookup(
-			$this->store,
-			$this->propertyStatisticsStore
-		);
-
-		$this->expectException( 'RuntimeException' );
-		$instance->fetchList();
-	}
-
 	/**
 	 * @dataProvider usageCountProvider
 	 */
@@ -513,7 +503,8 @@ class PropertyUsageListLookupTest extends TestCase {
 
 		$instance->fetchList();
 
-		$cursorClause = "(smw_sort, smw_id) > ('Alpha', 42)";
+		// Each OR clause is fully parenthesised by KeysetPredicateBuilder.
+		$cursorClause = "(smw_sort > 'Alpha') OR (smw_sort = 'Alpha' AND smw_id > 42)";
 		$this->assertContains( $cursorClause, $capturedWhereClauses,
 			'Expected cursor WHERE clause not found in andWhere calls' );
 	}

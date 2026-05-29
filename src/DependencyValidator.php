@@ -3,8 +3,8 @@
 namespace SMW;
 
 use MediaWiki\Title\Title;
-use Onoi\EventDispatcher\EventDispatcherAwareTrait;
 use SMW\DataItems\WikiPage;
+use SMW\EventDispatcher\EventDispatcher;
 use SMW\SQLStore\QueryDependency\DependencyLinksValidator;
 
 /**
@@ -15,17 +15,7 @@ use SMW\SQLStore\QueryDependency\DependencyLinksValidator;
  */
 class DependencyValidator {
 
-	use EventDispatcherAwareTrait;
-
-	private NamespaceExaminer $namespaceExaminer;
-
-	private DependencyLinksValidator $dependencyLinksValidator;
-
-	private EntityCache $entityCache;
-
-	private int $cacheTTL = 3600;
-
-	private ?string $eTag = null;
+	private const DIRTY_MARKER = '_smw_dirty_';
 
 	private static array $titles = [];
 
@@ -33,27 +23,13 @@ class DependencyValidator {
 	 * @since 3.1
 	 */
 	public function __construct(
-		NamespaceExaminer $namespaceExaminer,
-		DependencyLinksValidator $dependencyLinksValidator,
-		EntityCache $entityCache
+		private readonly NamespaceExaminer $namespaceExaminer,
+		private readonly DependencyLinksValidator $dependencyLinksValidator,
+		private readonly EntityCache $entityCache,
+		private readonly string $eTag,
+		private readonly int $cacheTTL,
+		private readonly EventDispatcher $eventDispatcher
 	) {
-		$this->namespaceExaminer = $namespaceExaminer;
-		$this->dependencyLinksValidator = $dependencyLinksValidator;
-		$this->entityCache = $entityCache;
-	}
-
-	/**
-	 * @since 3.1
-	 */
-	public function setCacheTTL( int $cacheTTL ): void {
-		$this->cacheTTL = $cacheTTL;
-	}
-
-	/**
-	 * @since 3.1
-	 */
-	public function setETag( string $eTag ): void {
-		$this->eTag = $eTag;
 	}
 
 	/**
@@ -114,17 +90,13 @@ class DependencyValidator {
 
 		$this->eventDispatcher->dispatch( 'InvalidateResultCache', $context );
 
-		// The parser cache is rejected, store for which key the request has
-		// happened since the `smw_touched` is only updated once and given that
-		// an anon/logged-in user create a different eTag (ParserCache) key
-		// this will allows us to distinguish them later
+		// Write the dirty marker under a fixed sub-key (not the current request's
+		// eTag). canKeepParserCache will then find no eTag sub-key on the next
+		// fetch and correctly reject the cache for each distinct eTag exactly
+		// once, recording the eTag's handled state via its own saveSub call.
 		$key = $this->makeCacheKey( $title );
+		$this->entityCache->overrideSub( $key, self::DIRTY_MARKER, '1', $this->cacheTTL );
 
-		// Genuine rejection based on `hasArchaicDependencies` therefore override
-		// any previous sub keys
-		$this->entityCache->overrideSub( $key, $this->eTag, 'hasArchaicDependencies', $this->cacheTTL );
-
-		// Disable the parser cache even before `RejectParserCacheValue` comes into play
 		return true;
 	}
 
@@ -145,7 +117,8 @@ class DependencyValidator {
 			return true;
 		}
 
-		$this->entityCache->saveSub( $key, $this->eTag, 'hasArchaicDependencies', $this->cacheTTL );
+		// Value is unread; only the sub-key's presence matters.
+		$this->entityCache->saveSub( $key, $this->eTag, '1', $this->cacheTTL );
 
 		return false;
 	}

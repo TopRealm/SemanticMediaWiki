@@ -106,10 +106,6 @@ class QueryStringifier {
 	private static function printouts( Query $query, $showParams = false ): array {
 		$printouts = [];
 
-		if ( $query->getExtraPrintouts() === null ) {
-			return $printouts;
-		}
-
 		foreach ( $query->getExtraPrintouts() as $printout ) {
 			$serialisation = $printout->getSerialisation( $showParams );
 			if ( $serialisation !== '' ) {
@@ -124,12 +120,14 @@ class QueryStringifier {
 	 * @return mixed[][][]|string[][]
 	 */
 	private static function sortKeys( Query $query ): array {
+		// `order=none` carries no sort keys; re-emit the directive explicitly
+		// so a re-serialised query stays unsorted.
+		if ( $query->getOption( Query::SORT_DISABLED ) ) {
+			return [ [], [ 'none' ] ];
+		}
+
 		$sort = [];
 		$order = [];
-
-		if ( $query->getSortKeys() === null ) {
-			return [ $sort, $order ];
-		}
 
 		foreach ( $query->getSortKeys() as $key => $value ) {
 

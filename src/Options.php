@@ -58,7 +58,7 @@ class Options implements JsonDeserializable {
 	 * @since 3.0
 	 *
 	 * @param string $key
-	 * @param string $value
+	 * @param mixed $value
 	 *
 	 * @return bool
 	 */
@@ -125,16 +125,6 @@ class Options implements JsonDeserializable {
 	 */
 	public function toArray(): array {
 		return $this->options;
-	}
-
-	/**
-	 * @deprecated since 3.0, use Options::toArray
-	 * @since 2.4
-	 *
-	 * @return array
-	 */
-	public function getOptions(): array {
-		return $this->toArray();
 	}
 
 	/**

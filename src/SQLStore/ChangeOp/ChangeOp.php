@@ -4,6 +4,7 @@ namespace SMW\SQLStore\ChangeOp;
 
 use ArrayIterator;
 use IteratorAggregate;
+use RuntimeException;
 use SMW\DataItems\WikiPage;
 
 /**
@@ -199,8 +200,15 @@ class ChangeOp implements IteratorAggregate {
 	 * @since 3.0
 	 *
 	 * @return ChangeDiff
+	 * @throws RuntimeException
 	 */
 	public function newChangeDiff(): ChangeDiff {
+		if ( $this->subject === null ) {
+			throw new RuntimeException(
+				'ChangeDiff requires a subject.'
+			);
+		}
+
 		$changeDiff = new ChangeDiff(
 			$this->subject,
 			$this->getTableChangeOps(),
@@ -306,16 +314,6 @@ class ChangeOp implements IteratorAggregate {
 	 */
 	public function getChangedEntityIdSummaryList(): array {
 		return array_keys( $this->getChangedEntityIdListByType() );
-	}
-
-	/**
-	 * @deprecated since 3.0, use ChangeOp::getChangedEntityIdSummaryList
-	 * @since 2.3
-	 *
-	 * @return array
-	 */
-	public function getCombinedIdListOfChangedEntities(): array {
-		return $this->getChangedEntityIdSummaryList();
 	}
 
 	private function addToIdList( array &$list, $value ): void {

@@ -8,6 +8,7 @@ use SMW\Query\Language\Conjunction;
 use SMW\Query\Language\Description;
 use SMW\Query\Language\Disjunction;
 use SMW\Query\Parser as QueryParser;
+use SMW\Services\ServicesFactory;
 use SMW\SQLStore\QueryEngine\ConditionBuilder;
 use SMW\SQLStore\QueryEngine\DescriptionInterpreter;
 use SMW\SQLStore\QueryEngine\QuerySegment;
@@ -98,10 +99,24 @@ class ConceptDescriptionInterpreter implements DescriptionInterpreter {
 			return $query;
 		}
 
-		global $smwgQConceptCaching, $smwgQMaxSize, $smwgQMaxDepth, $smwgQFeatures, $smwgQConceptCacheLifetime;
+		// Read $smwgQConceptCaching via Settings (not $GLOBALS) so the value goes
+		// through LegacyConstantNormalizer's string->int normalization (#6586).
+		// PHP 8's stricter comparison rules make `'hard' == 0` evaluate to false,
+		// so a direct read of the new string form would silently flip the
+		// $may_be_computed decision and break concept caching.
+		// Read $smwgQConceptCaching and $smwgQFeatures via Settings (not $GLOBALS)
+		// so the values go through LegacyConstantNormalizer (#6586). PHP 8's
+		// stricter comparison rules make `'hard' == 0` evaluate to false, and
+		// `array | int` is a TypeError, so a direct read of the new forms would
+		// silently flip the $may_be_computed decision or fatal at the bitwise
+		// expression below.
+		$settings = ServicesFactory::getInstance()->getSettings();
+		$conceptCaching = $settings->get( 'smwgQConceptCaching' );
+		$queryFeatures = $settings->get( 'smwgQFeatures' );
+		global $smwgQMaxSize, $smwgQMaxDepth, $smwgQConceptCacheLifetime;
 
-		$may_be_computed = ( $smwgQConceptCaching == CONCEPT_CACHE_NONE ) ||
-			( ( $smwgQConceptCaching == CONCEPT_CACHE_HARD ) && ( ( ~( ~( $row->concept_features + 0 ) | $smwgQFeatures ) ) == 0 ) &&
+		$may_be_computed = ( $conceptCaching == CONCEPT_CACHE_NONE ) ||
+			( ( $conceptCaching == CONCEPT_CACHE_HARD ) && ( ( ~( ~( $row->concept_features + 0 ) | $queryFeatures ) ) == 0 ) &&
 			  ( $smwgQMaxSize >= $row->concept_size ) && ( $smwgQMaxDepth >= $row->concept_depth ) );
 
 		if ( $row->cache_date &&

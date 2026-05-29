@@ -5,6 +5,7 @@ namespace SMW\Tests\Unit\MediaWiki\Jobs;
 use MediaWiki\MediaWikiServices;
 use MediaWiki\Title\Title;
 use PHPUnit\Framework\TestCase;
+use ReflectionClass;
 use SMW\DataItems\Property;
 use SMW\DataItems\WikiPage;
 use SMW\DataModel\SemanticData;
@@ -27,28 +28,30 @@ class UpdateDispatcherJobTest extends TestCase {
 	protected $expectedProperty;
 	protected $expectedSubjects;
 	private $semanticDataSerializer;
-	private $testEnvironment;
+	private TestEnvironment $testEnvironment;
 
 	protected function setUp(): void {
 		parent::setUp();
 
 		$this->semanticDataSerializer = ApplicationFactory::getInstance()->newSerializerFactory()->newSemanticDataSerializer();
 
+		// SerializerFactory is still resolved through ApplicationFactory by the
+		// job under test; configure the environment with default settings.
 		$this->testEnvironment = new TestEnvironment( [
 			'smwgMainCacheType'        => 'hash',
 			'smwgEnableUpdateJobs' => false
 		] );
-
-		$store = $this->getMockBuilder( Store::class )
-			->disableOriginalConstructor()
-			->getMockForAbstractClass();
-
-		$this->testEnvironment->registerObject( 'Store', $store );
 	}
 
 	protected function tearDown(): void {
 		$this->testEnvironment->tearDown();
 		parent::tearDown();
+	}
+
+	private function newStore(): Store {
+		return $this->getMockBuilder( Store::class )
+			->disableOriginalConstructor()
+			->getMockForAbstractClass();
 	}
 
 	public function testCanConstruct() {
@@ -58,7 +61,7 @@ class UpdateDispatcherJobTest extends TestCase {
 
 		$this->assertInstanceOf(
 			UpdateDispatcherJob::class,
-			new UpdateDispatcherJob( $title )
+			new UpdateDispatcherJob( $title, [], $this->newStore() )
 		);
 	}
 
@@ -67,7 +70,7 @@ class UpdateDispatcherJobTest extends TestCase {
 			->disableOriginalConstructor()
 			->getMock();
 
-		$instance = new UpdateDispatcherJob( $title, [] );
+		$instance = new UpdateDispatcherJob( $title, [], $this->newStore() );
 		$instance->isEnabledJobQueue( false );
 
 		$this->assertNull( $instance->pushToJobQueue() );
@@ -83,7 +86,7 @@ class UpdateDispatcherJobTest extends TestCase {
 				'Foo#0##' => true,
 				'Bar#102##'
 			]
-		] );
+		], $this->newStore() );
 
 		$instance->isEnabledJobQueue( false );
 		$instance->run();
@@ -104,7 +107,7 @@ class UpdateDispatcherJobTest extends TestCase {
 				'|nulltitle#0##' => true,
 				'deserlizeerror#0' => true
 			]
-		] );
+		], $this->newStore() );
 
 		$instance->isEnabledJobQueue( false );
 		$instance->run();
@@ -133,9 +136,7 @@ class UpdateDispatcherJobTest extends TestCase {
 			->method( 'getInProperties' )
 			->willReturn( [] );
 
-		$this->testEnvironment->registerObject( 'Store', $store );
-
-		$instance = new UpdateDispatcherJob( $title, [] );
+		$instance = new UpdateDispatcherJob( $title, [], $store );
 		$instance->isEnabledJobQueue( false );
 
 		$this->assertTrue( $instance->run() );
@@ -169,9 +170,7 @@ class UpdateDispatcherJobTest extends TestCase {
 			->method( 'getPropertySubjects' )
 			->willReturn( [] );
 
-		$this->testEnvironment->registerObject( 'Store', $store );
-
-		$instance = new UpdateDispatcherJob( $title, [] );
+		$instance = new UpdateDispatcherJob( $title, [], $store );
 		$instance->isEnabledJobQueue( false );
 
 		$this->assertTrue( $instance->run() );
@@ -200,9 +199,7 @@ class UpdateDispatcherJobTest extends TestCase {
 			->method( 'getAllPropertySubjects' )
 			->willReturn( [] );
 
-		$this->testEnvironment->registerObject( 'Store', $store );
-
-		$instance = new UpdateDispatcherJob( $title, $parameters );
+		$instance = new UpdateDispatcherJob( $title, $parameters, $store );
 		$instance->isEnabledJobQueue( false );
 
 		$this->assertTrue(
@@ -247,9 +244,7 @@ class UpdateDispatcherJobTest extends TestCase {
 			->method( 'getPropertySubjects' )
 			->willReturn( [] );
 
-		$this->testEnvironment->registerObject( 'Store', $store );
-
-		$instance = new UpdateDispatcherJob( $setup['title'], $setup['parameters'] );
+		$instance = new UpdateDispatcherJob( $setup['title'], $setup['parameters'], $store );
 		$instance->isEnabledJobQueue( false );
 		$instance->run();
 
@@ -304,9 +299,7 @@ class UpdateDispatcherJobTest extends TestCase {
 			->method( 'getPropertySubjects' )
 			->willReturn( [] );
 
-		$this->testEnvironment->registerObject( 'Store', $store );
-
-		$instance = new UpdateDispatcherJob( $setup['title'], $parameters );
+		$instance = new UpdateDispatcherJob( $setup['title'], $parameters, $store );
 		$instance->isEnabledJobQueue( false );
 		$instance->run();
 
@@ -398,6 +391,57 @@ class UpdateDispatcherJobTest extends TestCase {
 		];
 
 		return $provider;
+	}
+
+	public function testIdOnlyInvocationProducesNoSecondaryDispatchJobs() {
+		$title = MediaWikiServices::getInstance()->getTitleFactory()->newFromText(
+			__METHOD__, NS_MAIN
+		);
+
+		$store = $this->getMockBuilder( Store::class )
+			->disableOriginalConstructor()
+			->onlyMethods( [
+				'getProperties',
+				'getInProperties',
+			] )
+			->getMockForAbstractClass();
+
+		$store->expects( $this->any() )
+			->method( 'getProperties' )
+			->willReturn( [] );
+
+		$store->expects( $this->any() )
+			->method( 'getInProperties' )
+			->willReturn( [] );
+
+		$reflector = new ReflectionClass( UpdateDispatcherJob::class );
+		$jobsProp = $reflector->getProperty( 'jobs' );
+		$jobsProp->setAccessible( true );
+
+		// Unrestricted dispatch
+		$unrestricted = new UpdateDispatcherJob(
+			$title,
+			[
+				'_id' => 12345,
+			],
+			$store
+		);
+		$unrestricted->isEnabledJobQueue( false );
+		$this->assertTrue( $unrestricted->run() );
+		$this->assertSame( [], $jobsProp->getValue( $unrestricted ) );
+
+		// Restricted dispatch (mirrors the ArticleDelete production call site)
+		$restricted = new UpdateDispatcherJob(
+			$title,
+			[
+				'_id' => 12345,
+				UpdateDispatcherJob::RESTRICTED_DISPATCH_POOL => true,
+			],
+			$store
+		);
+		$restricted->isEnabledJobQueue( false );
+		$this->assertTrue( $restricted->run() );
+		$this->assertSame( [], $jobsProp->getValue( $restricted ) );
 	}
 
 	/**

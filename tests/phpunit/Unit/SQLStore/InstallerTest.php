@@ -2,10 +2,13 @@
 
 namespace SMW\Tests\Unit\SQLStore;
 
+use MediaWiki\HookContainer\HookContainer;
+use MediaWiki\JobQueue\JobFactory;
+use MediaWiki\Title\Title;
+use MediaWiki\Title\TitleFactory;
 use Onoi\MessageReporter\MessageReporterFactory;
 use PHPUnit\Framework\TestCase;
-use SMW\MediaWiki\HookDispatcher;
-use SMW\MediaWiki\JobQueue;
+use SMW\MediaWiki\Job;
 use SMW\SetupFile;
 use SMW\SQLStore\Installer;
 use SMW\SQLStore\Installer\TableOptimizer;
@@ -34,8 +37,9 @@ class InstallerTest extends TestCase {
 	private $tableBuildExaminer;
 	private $versionExaminer;
 	private $tableOptimizer;
-	private JobQueue $jobQueue;
-	private $hookDispatcher;
+	private TitleFactory $titleFactory;
+	private JobFactory $jobFactory;
+	private $hookContainer;
 	private $setupFile;
 
 	protected function setUp(): void {
@@ -63,19 +67,21 @@ class InstallerTest extends TestCase {
 			->disableOriginalConstructor()
 			->getMock();
 
-		$this->jobQueue = $this->getMockBuilder( '\SMW\MediaWiki\JobQueue' )
+		$this->titleFactory = $this->getMockBuilder( TitleFactory::class )
 			->disableOriginalConstructor()
 			->getMock();
 
-		$this->hookDispatcher = $this->getMockBuilder( HookDispatcher::class )
+		$this->jobFactory = $this->getMockBuilder( JobFactory::class )
+			->disableOriginalConstructor()
+			->getMock();
+
+		$this->hookContainer = $this->getMockBuilder( HookContainer::class )
 			->disableOriginalConstructor()
 			->getMock();
 
 		$this->setupFile = $this->getMockBuilder( SetupFile::class )
 			->disableOriginalConstructor()
 			->getMock();
-
-		$this->testEnvironment->registerObject( 'JobQueue', $this->jobQueue );
 	}
 
 	public function testCanConstruct() {
@@ -84,7 +90,9 @@ class InstallerTest extends TestCase {
 			$this->tableBuilder,
 			$this->tableBuildExaminer,
 			$this->versionExaminer,
-			$this->tableOptimizer
+			$this->tableOptimizer,
+			$this->titleFactory,
+			$this->jobFactory
 		);
 
 		$this->assertInstanceOf(
@@ -122,10 +130,12 @@ class InstallerTest extends TestCase {
 			$tableBuilder,
 			$this->tableBuildExaminer,
 			$this->versionExaminer,
-			$this->tableOptimizer
+			$this->tableOptimizer,
+			$this->titleFactory,
+			$this->jobFactory
 		);
 
-		$instance->setHookDispatcher( $this->hookDispatcher );
+		$instance->setHookContainer( $this->hookContainer );
 		$instance->setMessageReporter( $this->spyMessageReporter );
 		$instance->setSetupFile( $this->setupFile );
 
@@ -144,10 +154,12 @@ class InstallerTest extends TestCase {
 			$this->tableBuilder,
 			$this->tableBuildExaminer,
 			$this->versionExaminer,
-			$this->tableOptimizer
+			$this->tableOptimizer,
+			$this->titleFactory,
+			$this->jobFactory
 		);
 
-		$instance->setHookDispatcher( $this->hookDispatcher );
+		$instance->setHookContainer( $this->hookContainer );
 		$instance->setMessageReporter( $this->spyMessageReporter );
 		$instance->setSetupFile( $this->setupFile );
 
@@ -155,8 +167,20 @@ class InstallerTest extends TestCase {
 	}
 
 	public function testInstallWithSupplementJobs() {
-		$this->jobQueue->expects( $this->exactly( 2 ) )
-			->method( 'push' );
+		$title = $this->getMockBuilder( Title::class )
+			->disableOriginalConstructor()
+			->getMock();
+
+		$this->titleFactory->method( 'newFromText' )->willReturn( $title );
+
+		$job = $this->getMockBuilder( Job::class )
+			->disableOriginalConstructor()
+			->getMock();
+
+		$job->expects( $this->exactly( 2 ) )
+			->method( 'insert' );
+
+		$this->jobFactory->method( 'newJob' )->willReturn( $job );
 
 		$table = $this->getMockBuilder( Table::class )
 			->disableOriginalConstructor()
@@ -186,10 +210,12 @@ class InstallerTest extends TestCase {
 			$tableBuilder,
 			$this->tableBuildExaminer,
 			$this->versionExaminer,
-			$this->tableOptimizer
+			$this->tableOptimizer,
+			$this->titleFactory,
+			$this->jobFactory
 		);
 
-		$instance->setHookDispatcher( $this->hookDispatcher );
+		$instance->setHookContainer( $this->hookContainer );
 		$instance->setMessageReporter( $this->spyMessageReporter );
 		$instance->setSetupFile( $this->setupFile );
 
@@ -225,10 +251,12 @@ class InstallerTest extends TestCase {
 			$tableBuilder,
 			$this->tableBuildExaminer,
 			$this->versionExaminer,
-			$this->tableOptimizer
+			$this->tableOptimizer,
+			$this->titleFactory,
+			$this->jobFactory
 		);
 
-		$instance->setHookDispatcher( $this->hookDispatcher );
+		$instance->setHookContainer( $this->hookContainer );
 		$instance->setMessageReporter( $this->spyMessageReporter );
 		$instance->setSetupFile( $this->setupFile );
 
@@ -259,10 +287,12 @@ class InstallerTest extends TestCase {
 			$tableBuilder,
 			$this->tableBuildExaminer,
 			$this->versionExaminer,
-			$this->tableOptimizer
+			$this->tableOptimizer,
+			$this->titleFactory,
+			$this->jobFactory
 		);
 
-		$instance->setHookDispatcher( $this->hookDispatcher );
+		$instance->setHookContainer( $this->hookContainer );
 		$instance->setMessageReporter( $this->spyMessageReporter );
 		$instance->setSetupFile( $this->setupFile );
 
@@ -277,7 +307,9 @@ class InstallerTest extends TestCase {
 			$this->tableBuilder,
 			$this->tableBuildExaminer,
 			$this->versionExaminer,
-			$this->tableOptimizer
+			$this->tableOptimizer,
+			$this->titleFactory,
+			$this->jobFactory
 		);
 
 		$callback = static function () use( $instance ) {

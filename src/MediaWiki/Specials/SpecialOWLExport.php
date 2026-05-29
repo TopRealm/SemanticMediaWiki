@@ -58,6 +58,22 @@ class SpecialOWLExport extends SpecialPage {
 			$this->exportPages( $pages );
 			return;
 		} else {
+			// Cursor mode is opt-in via `?cursor=`. Checked BEFORE `?offset=`
+			// so a request that co-sends both gets cursor semantics (cursor
+			// is the authoritative anchor for keyset pagination).
+			$cursorRaw = $request->getVal( 'cursor' );
+
+			if ( $cursorRaw !== null ) {
+				$this->startRDFExport();
+				// Clamp negative or non-numeric input to 0 (first page in
+				// cursor mode). A negative `(int)` cast would pass the
+				// `$cursor !== null` check but skip the WHERE predicate
+				// in `printPageList()`, silently returning the first page
+				// for malformed requests.
+				$this->export_controller->printPageList( 0, 30, max( 0, (int)$cursorRaw ) );
+				return;
+			}
+
 			$offset = $request->getVal( 'offset' );
 
 			if ( $offset !== null ) {
@@ -92,24 +108,24 @@ class SpecialOWLExport extends SpecialPage {
 		$user = $this->getUser();
 
 		$html = '<form name="tripleSearch" action="" method="POST">' . "\n" .
-					'<p>' . $this->msg( 'smw_exportrdf_docu' )->text() . "</p>\n" .
+					'<p>' . $this->msg( 'smw_exportrdf_docu' )->escaped() . "</p>\n" .
 					'<input type="hidden" name="postform" value="1"/>' . "\n" .
 					'<textarea name="pages" cols="40" rows="10"></textarea><br />' . "\n";
 
 		if ( $user->isAllowed( 'delete' ) || $smwgAllowRecursiveExport ) {
-			$html .= '<input type="checkbox" name="recursive" value="1" id="rec">&#160;<label for="rec">' . $this->msg( 'smw_exportrdf_recursive' )->text() . '</label></input><br />' . "\n";
+			$html .= '<input type="checkbox" name="recursive" value="1" id="rec">&#160;<label for="rec">' . $this->msg( 'smw_exportrdf_recursive' )->escaped() . '</label></input><br />' . "\n";
 		}
 
 		if ( $user->isAllowed( 'delete' ) || $smwgExportBacklinks ) {
-			$html .= '<input type="checkbox" name="backlinks" value="1" default="true" id="bl">&#160;<label for="bl">' . $this->msg( 'smw_exportrdf_backlinks' )->text() . '</label></input><br />' . "\n";
+			$html .= '<input type="checkbox" name="backlinks" value="1" default="true" id="bl">&#160;<label for="bl">' . $this->msg( 'smw_exportrdf_backlinks' )->escaped() . '</label></input><br />' . "\n";
 		}
 
 		if ( $user->isAllowed( 'delete' ) || $smwgExportAll ) {
 			$html .= '<br />';
-			$html .= '<input type="text" name="date" value="' . date( DATE_W3C, mktime( 0, 0, 0, 1, 1, 2000 ) ) . '" id="date">&#160;<label for="ea">' . $this->msg( 'smw_exportrdf_lastdate' )->text() . '</label></input><br />' . "\n";
+			$html .= '<input type="text" name="date" value="' . date( DATE_W3C, mktime( 0, 0, 0, 1, 1, 2000 ) ) . '" id="date">&#160;<label for="date">' . $this->msg( 'smw_exportrdf_lastdate' )->escaped() . '</label></input><br />' . "\n";
 		}
 
-		$html .= '<br /><input type="submit"  value="' . $this->msg( 'smw_exportrdf_submit' )->text() . "\"/>\n</form>";
+		$html .= '<br /><input type="submit"  value="' . $this->msg( 'smw_exportrdf_submit' )->escaped() . "\"/>\n</form>";
 
 		$out->addHTML( $html );
 	}

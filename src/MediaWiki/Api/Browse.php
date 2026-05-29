@@ -3,6 +3,9 @@
 namespace SMW\MediaWiki\Api;
 
 use MediaWiki\Api\ApiBase;
+use MediaWiki\Api\ApiMain;
+use MediaWiki\Title\TitleFactory;
+use Onoi\Cache\Cache;
 use SMW\Exception\JSONParseException;
 use SMW\Exception\ParameterNotFoundException;
 use SMW\Exception\RedirectTargetUnresolvableException;
@@ -15,7 +18,9 @@ use SMW\MediaWiki\Api\Browse\PSubjectLookup;
 use SMW\MediaWiki\Api\Browse\PValueLookup;
 use SMW\MediaWiki\Api\Browse\SubjectLookup;
 use SMW\Services\ServicesFactory as ApplicationFactory;
+use SMW\Settings;
 use SMW\SQLStore\SQLStore;
+use SMW\Store;
 use Wikimedia\ParamValidator\ParamValidator;
 
 /**
@@ -27,6 +32,20 @@ use Wikimedia\ParamValidator\ParamValidator;
  * @author mwjames
  */
 class Browse extends ApiBase {
+
+	/**
+	 * @since 7.0.0
+	 */
+	public function __construct(
+		ApiMain $main,
+		string $action,
+		private readonly Store $store,
+		private readonly Settings $settings,
+		private readonly Cache $cache,
+		private readonly TitleFactory $titleFactory
+	) {
+		parent::__construct( $main, $action );
+	}
 
 	/**
 	 * @see ApiBase::execute
@@ -92,9 +111,7 @@ class Browse extends ApiBase {
 	}
 
 	private function callListLookup( $ns, array $parameters ) {
-		$applicationFactory = ApplicationFactory::getInstance();
-
-		$cacheUsage = $applicationFactory->getSettings()->get(
+		$cacheUsage = $this->settings->get(
 			'smwgCacheUsage'
 		);
 
@@ -104,14 +121,7 @@ class Browse extends ApiBase {
 			$cacheTTL = $cacheUsage['api.browse'];
 		}
 
-		$store = $applicationFactory->getStore();
-
-		// We explicitly want the SQLStore here to avoid
-		// "Call to undefined method SMW\SPARQLStore\SPARQLStore::getSQLOptions() ..."
-		// since we don't use those methods anywher else other than the SQLStore
-		if ( !is_a( $store, SQLStore::class ) ) {
-			$store = $applicationFactory->getStore( SQLStore::class );
-		}
+		$store = $this->getSQLStore();
 
 		$listLookup = new ListLookup(
 			$store,
@@ -119,7 +129,7 @@ class Browse extends ApiBase {
 		);
 
 		$cachingLookup = new CachingLookup(
-			$applicationFactory->getCache(),
+			$this->cache,
 			$listLookup
 		);
 
@@ -135,9 +145,7 @@ class Browse extends ApiBase {
 	}
 
 	private function callPValueLookup( array $parameters ) {
-		$applicationFactory = ApplicationFactory::getInstance();
-
-		$cacheUsage = $applicationFactory->getSettings()->get(
+		$cacheUsage = $this->settings->get(
 			'smwgCacheUsage'
 		);
 
@@ -147,21 +155,14 @@ class Browse extends ApiBase {
 			$cacheTTL = $cacheUsage['api.browse.pvalue'];
 		}
 
-		$store = $applicationFactory->getStore();
-
-		// We explicitly want the SQLStore here to avoid
-		// "Call to undefined method SMW\SPARQLStore\SPARQLStore::getSQLOptions() ..."
-		// since we don't use those methods anywher else other than the SQLStore
-		if ( !is_a( $store, SQLStore::class ) ) {
-			$store = $applicationFactory->getStore( SQLStore::class );
-		}
+		$store = $this->getSQLStore();
 
 		$listLookup = new PValueLookup(
 			$store
 		);
 
 		$cachingLookup = new CachingLookup(
-			$applicationFactory->getCache(),
+			$this->cache,
 			$listLookup
 		);
 
@@ -175,9 +176,7 @@ class Browse extends ApiBase {
 	}
 
 	private function callPSubjectLookup( array $parameters ) {
-		$applicationFactory = ApplicationFactory::getInstance();
-
-		$cacheUsage = $applicationFactory->getSettings()->get(
+		$cacheUsage = $this->settings->get(
 			'smwgCacheUsage'
 		);
 
@@ -187,21 +186,14 @@ class Browse extends ApiBase {
 			$cacheTTL = $cacheUsage['api.browse.psubject'];
 		}
 
-		$store = $applicationFactory->getStore();
-
-		// We explicitly want the SQLStore here to avoid
-		// "Call to undefined method SMW\SPARQLStore\SPARQLStore::getSQLOptions() ..."
-		// since we don't use those methods anywher else other than the SQLStore
-		if ( !is_a( $store, SQLStore::class ) ) {
-			$store = $applicationFactory->getStore( SQLStore::class );
-		}
+		$store = $this->getSQLStore();
 
 		$listLookup = new PSubjectLookup(
 			$store
 		);
 
 		$cachingLookup = new CachingLookup(
-			$applicationFactory->getCache(),
+			$this->cache,
 			$listLookup
 		);
 
@@ -217,7 +209,7 @@ class Browse extends ApiBase {
 	private function callPageLookup( array $parameters ) {
 		$applicationFactory = ApplicationFactory::getInstance();
 
-		$cacheUsage = $applicationFactory->getSettings()->get(
+		$cacheUsage = $this->settings->get(
 			'smwgCacheUsage'
 		);
 
@@ -227,17 +219,17 @@ class Browse extends ApiBase {
 			$cacheTTL = $cacheUsage['api.browse'];
 		}
 
-		$connection = $applicationFactory->getStore()->getConnection( 'mw.db' );
+		$connection = $this->store->getConnection( 'mw.db' );
 
 		$articleLookup = new ArticleLookup(
 			$connection,
 			new ArticleAugmentor(
-				$applicationFactory->create( 'TitleFactory' )
+				$this->titleFactory
 			)
 		);
 
 		$cachingLookup = new CachingLookup(
-			$applicationFactory->getCache(),
+			$this->cache,
 			$articleLookup
 		);
 
@@ -252,7 +244,7 @@ class Browse extends ApiBase {
 
 	private function callSubjectLookup( array $parameters ): array {
 		$subjectLookup = new SubjectLookup(
-			ApplicationFactory::getInstance()->getStore()
+			$this->store
 		);
 
 		try {
@@ -264,6 +256,21 @@ class Browse extends ApiBase {
 		}
 
 		return $res;
+	}
+
+	/**
+	 * The list lookups need the SQLStore-typed surface (e.g. `getSQLOptions`).
+	 * When the default store is a non-SQL backend (notably SPARQLStore) we
+	 * fall back to the registered SQLStore via `ApplicationFactory` because
+	 * it is not exposed as a separate global service. This mirrors the
+	 * partial-DI pattern used by slice 6's UpdateJob `$store !== null` branch.
+	 */
+	private function getSQLStore(): Store {
+		if ( $this->store instanceof SQLStore ) {
+			return $this->store;
+		}
+
+		return ApplicationFactory::getInstance()->getStore( SQLStore::class );
 	}
 
 	/**

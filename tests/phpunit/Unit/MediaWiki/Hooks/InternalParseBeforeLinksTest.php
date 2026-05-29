@@ -10,9 +10,10 @@ use MediaWiki\Title\Title;
 use PHPUnit\Framework\TestCase;
 use SMW\MediaWiki\Hooks\InternalParseBeforeLinks;
 use SMW\Services\ServicesFactory as ApplicationFactory;
-use SMW\Store;
+use SMW\Settings;
 use SMW\Tests\TestEnvironment;
 use SMW\Tests\Utils\Mock\MockTitle;
+use StripState;
 
 /**
  * @covers \SMW\MediaWiki\Hooks\InternalParseBeforeLinks
@@ -29,6 +30,10 @@ class InternalParseBeforeLinksTest extends TestCase {
 	private $parserFactory;
 	private $stripState;
 	private $testEnvironment;
+	private $settings;
+	private $parserDataFactory;
+	private $inTextAnnotationParserFactory;
+	private $mwCollaboratorFactory;
 
 	protected function setUp(): void {
 		parent::setUp();
@@ -38,15 +43,25 @@ class InternalParseBeforeLinksTest extends TestCase {
 		$this->semanticDataValidator = $this->testEnvironment->getUtilityFactory()->newValidatorFactory()->newSemanticDataValidator();
 		$this->parserFactory = $this->testEnvironment->getUtilityFactory()->newParserFactory();
 
-		$this->stripState = $this->getMockBuilder( '\StripState' )
+		$this->stripState = $this->getMockBuilder( StripState::class )
 			->disableOriginalConstructor()
 			->getMock();
 
-		$store = $this->getMockBuilder( Store::class )
-			->disableOriginalConstructor()
-			->getMockForAbstractClass();
+		$this->settings = $this->createMock( Settings::class );
 
-		$this->testEnvironment->registerObject( 'Store', $store );
+		$applicationFactory = ApplicationFactory::getInstance();
+		$this->parserDataFactory = $applicationFactory->getParserDataFactory();
+		$this->inTextAnnotationParserFactory = MediaWikiServices::getInstance()->getService( 'SMW.InTextAnnotationParserFactory' );
+		$this->mwCollaboratorFactory = $applicationFactory->newMwCollaboratorFactory();
+	}
+
+	private function newInstance( ?Settings $settings = null ): InternalParseBeforeLinks {
+		return new InternalParseBeforeLinks(
+			$settings ?? $this->settings,
+			$this->parserDataFactory,
+			$this->inTextAnnotationParserFactory,
+			$this->mwCollaboratorFactory
+		);
 	}
 
 	protected function tearDown(): void {
@@ -55,13 +70,9 @@ class InternalParseBeforeLinksTest extends TestCase {
 	}
 
 	public function testCanConstruct() {
-		$parser = $this->getMockBuilder( Parser::class )
-			->disableOriginalConstructor()
-			->getMock();
-
 		$this->assertInstanceOf(
 			InternalParseBeforeLinks::class,
-			new InternalParseBeforeLinks( $parser, $this->stripState )
+			$this->newInstance()
 		);
 	}
 
@@ -76,13 +87,10 @@ class InternalParseBeforeLinksTest extends TestCase {
 			->method( 'getOptions' )
 			->willReturn( $this->createMock( ParserOptions::class ) );
 
-		$instance = new InternalParseBeforeLinks(
-			$parser,
-			$this->stripState
-		);
+		$instance = $this->newInstance();
 
 		$this->assertTrue(
-			$instance->process( $text )
+			$instance->onInternalParseBeforeLinks( $parser, $text, $this->stripState )
 		);
 	}
 
@@ -97,7 +105,7 @@ class InternalParseBeforeLinksTest extends TestCase {
 			->method( 'isSpecialPage' )
 			->willReturn( false );
 
-		$parserOptions = $this->getMockBuilder( '\ParserOptions' )
+		$parserOptions = $this->getMockBuilder( ParserOptions::class )
 			->disableOriginalConstructor()
 			->getMock();
 
@@ -117,13 +125,10 @@ class InternalParseBeforeLinksTest extends TestCase {
 			->method( 'getTitle' )
 			->willReturn( $title );
 
-		$instance = new InternalParseBeforeLinks(
-			$parser,
-			$this->stripState
-		);
+		$instance = $this->newInstance();
 
 		$this->assertTrue(
-			$instance->process( $text )
+			$instance->onInternalParseBeforeLinks( $parser, $text, $this->stripState )
 		);
 	}
 
@@ -151,11 +156,7 @@ class InternalParseBeforeLinksTest extends TestCase {
 			->with( 'Bar' )
 			->willReturn( true );
 
-		$parserOptions = $this->getMockBuilder( '\ParserOptions' )
-			->disableOriginalConstructor()
-			->getMock();
-
-		$parserOutput = $this->getMockBuilder( ParserOutput::class )
+		$parserOptions = $this->getMockBuilder( ParserOptions::class )
 			->disableOriginalConstructor()
 			->getMock();
 
@@ -171,18 +172,13 @@ class InternalParseBeforeLinksTest extends TestCase {
 			->method( 'getOptions' )
 			->willReturn( $parserOptions );
 
-		$instance = new InternalParseBeforeLinks(
-			$parser,
-			$this->stripState
-		);
+		$this->settings->method( 'get' )
+			->with( 'smwgEnabledSpecialPage' )
+			->willReturn( [ 'Bar' ] );
 
-		$instance->setOptions(
-			[
-				'smwgEnabledSpecialPage' => [ 'Bar' ]
-			]
-		);
+		$instance = $this->newInstance();
 
-		$instance->process( $text );
+		$instance->onInternalParseBeforeLinks( $parser, $text, $this->stripState );
 	}
 
 	public function testProcessOfInterfaceMessageOnSpecialPageWithOnOffMarker() {
@@ -209,7 +205,7 @@ class InternalParseBeforeLinksTest extends TestCase {
 			->with( 'Bar' )
 			->willReturn( true );
 
-		$parserOptions = $this->getMockBuilder( '\ParserOptions' )
+		$parserOptions = $this->getMockBuilder( ParserOptions::class )
 			->disableOriginalConstructor()
 			->getMock();
 
@@ -233,12 +229,9 @@ class InternalParseBeforeLinksTest extends TestCase {
 			->method( 'getTitle' )
 			->willReturn( $title );
 
-		$instance = new InternalParseBeforeLinks(
-			$parser,
-			$this->stripState
-		);
+		$instance = $this->newInstance();
 
-		$instance->process( $text );
+		$instance->onInternalParseBeforeLinks( $parser, $text, $this->stripState );
 	}
 
 	/**
@@ -248,13 +241,10 @@ class InternalParseBeforeLinksTest extends TestCase {
 		$text   = 'Foo';
 		$parser = $this->parserFactory->newFromTitle( $title );
 
-		$instance = new InternalParseBeforeLinks(
-			$parser,
-			$this->stripState
-		);
+		$instance = $this->newInstance();
 
 		$this->assertTrue(
-			$instance->process( $text )
+			$instance->onInternalParseBeforeLinks( $parser, $text, $this->stripState )
 		);
 	}
 
@@ -269,21 +259,17 @@ class InternalParseBeforeLinksTest extends TestCase {
 		$text   = $parameters['text'];
 		$parser = $this->parserFactory->newFromTitle( $parameters['title'] );
 
-		$instance = new InternalParseBeforeLinks(
-			$parser,
-			$this->stripState
-		);
-
 		$smwgEnabledSpecialPage = isset( $parameters['settings']['smwgEnabledSpecialPage'] ) ? $parameters['settings']['smwgEnabledSpecialPage'] : [];
 
-		$instance->setOptions(
-			[
-				'smwgEnabledSpecialPage' => $smwgEnabledSpecialPage
-			]
-		);
+		$settings = $this->createMock( Settings::class );
+		$settings->method( 'get' )
+			->with( 'smwgEnabledSpecialPage' )
+			->willReturn( $smwgEnabledSpecialPage );
+
+		$instance = $this->newInstance( $settings );
 
 		$this->assertTrue(
-			$instance->process( $text )
+			$instance->onInternalParseBeforeLinks( $parser, $text, $this->stripState )
 		);
 
 		$this->assertEquals(
@@ -353,7 +339,7 @@ class InternalParseBeforeLinksTest extends TestCase {
 				'title'    => $title,
 				'settings' => [
 					'smwgNamespacesWithSemanticLinks' => [ NS_MAIN => true ],
-					'smwgParserFeatures' => SMW_PARSER_STRICT
+					'smwgParserFeatures' => [ 'strict' ]
 				],
 				'text'  => 'Lorem ipsum dolor sit &$% [[FooBar::dictumst|寒い]]' .
 					' [[Bar::tincidunt semper]] facilisi {{volutpat}} Ut quis' .
@@ -375,7 +361,7 @@ class InternalParseBeforeLinksTest extends TestCase {
 				'title'    => $title,
 				'settings' => [
 					'smwgNamespacesWithSemanticLinks' => [ NS_MAIN => true ],
-					'smwgParserFeatures' => SMW_PARSER_STRICT
+					'smwgParserFeatures' => [ 'strict' ]
 				],
 				'text'  => '#REDIRECT [[Foo]]',
 				],
@@ -395,7 +381,7 @@ class InternalParseBeforeLinksTest extends TestCase {
 				'title'    => $title,
 				'settings' => [
 					'smwgNamespacesWithSemanticLinks' => [ NS_MAIN => true ],
-					'smwgParserFeatures' => SMW_PARSER_STRICT,
+					'smwgParserFeatures' => [ 'strict' ],
 					'smwgEnabledSpecialPage' => [ 'Ask', 'Foo' ]
 				],
 				'text'  => 'Lorem ipsum dolor sit &$% [[FooBar::dictumst|寒い]]' .
@@ -418,7 +404,7 @@ class InternalParseBeforeLinksTest extends TestCase {
 				'title'    => $title,
 				'settings' => [
 					'smwgNamespacesWithSemanticLinks' => [ NS_MAIN => true ],
-					'smwgParserFeatures' => SMW_PARSER_STRICT,
+					'smwgParserFeatures' => [ 'strict' ],
 					'smwgEnabledSpecialPage' => [ 'Ask', 'Foo' ]
 				],
 				'text'  => 'Lorem ipsum dolor sit &$% [[FooBar::dictumst|寒い]]' .
@@ -441,7 +427,7 @@ class InternalParseBeforeLinksTest extends TestCase {
 				'title'    => $title,
 				'settings' => [
 					'smwgNamespacesWithSemanticLinks' => [ NS_MAIN => true ],
-					'smwgParserFeatures' => SMW_PARSER_STRICT,
+					'smwgParserFeatures' => [ 'strict' ],
 					'smwgEnabledSpecialPage' => []
 				],
 				'text'  => 'Lorem ipsum dolor sit &$% [[FooBar::dictumst|寒い]]' .

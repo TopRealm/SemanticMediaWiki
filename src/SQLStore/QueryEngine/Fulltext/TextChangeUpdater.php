@@ -6,7 +6,7 @@ use Onoi\Cache\Cache;
 use Psr\Log\LoggerAwareTrait;
 use SMW\DataItems\WikiPage;
 use SMW\MediaWiki\Connection\Database;
-use SMW\Services\ServicesFactory as ApplicationFactory;
+use SMW\MediaWiki\JobFactory;
 use SMW\SQLStore\ChangeOp\ChangeDiff;
 use SMW\SQLStore\ChangeOp\ChangeOp;
 use SMW\SQLStore\ChangeOp\TableChangeOp;
@@ -35,9 +35,10 @@ class TextChangeUpdater {
 	 * @since 2.5
 	 */
 	public function __construct(
-		private Database $connection,
-		private Cache $cache,
-		private SearchTableUpdater $searchTableUpdater,
+		private readonly Database $connection,
+		private readonly Cache $cache,
+		private readonly SearchTableUpdater $searchTableUpdater,
+		private readonly JobFactory $jobFactory,
 	) {
 	}
 
@@ -99,8 +100,14 @@ class TextChangeUpdater {
 			return;
 		}
 
-		$fulltextSearchTableUpdateJob = ApplicationFactory::getInstance()->newJobFactory()->newFulltextSearchTableUpdateJob(
-			$changeOp->getSubject()->getTitle(),
+		$title = $changeOp->getSubject()->getTitle();
+
+		if ( $title === null ) {
+			return;
+		}
+
+		$fulltextSearchTableUpdateJob = $this->jobFactory->newFulltextSearchTableUpdateJob(
+			$title,
 			[
 				'slot:id' => $changeOp->getSubject()->getHash()
 			]
@@ -109,12 +116,8 @@ class TextChangeUpdater {
 		$fulltextSearchTableUpdateJob->lazyPush();
 
 		$this->logger->info(
-			[
-				'Fulltext',
-				'TextChangeUpdater',
-				'Table update (as job) scheduled',
-				'procTime in sec: {procTime}'
-			],
+			'Fulltext TextChangeUpdater Table update (as job) scheduled procTime '
+				. 'in sec: {procTime}',
 			[
 				'method' => __METHOD__,
 				'role' => 'developer',
@@ -144,11 +147,7 @@ class TextChangeUpdater {
 		}
 
 		$this->logger->info(
-			[
-				'Fulltext',
-				'TextChangeUpdater',
-				'Failed update (ChangeDiff) on {id}'
-			],
+			'Fulltext TextChangeUpdater Failed update (ChangeDiff) on {id}',
 			[
 				'method' => __METHOD__,
 				'role' => 'developer',
@@ -207,12 +206,8 @@ class TextChangeUpdater {
 		}
 
 		$this->logger->info(
-			[
-				'Fulltext',
-				'TextChangeUpdater',
-				'Table update completed',
-				'procTime in sec: {procTime}'
-			],
+			'Fulltext TextChangeUpdater Table update completed '
+				. 'procTime in sec: {procTime}',
 			[
 				'method' => __METHOD__,
 				'role' => 'developer',
@@ -250,7 +245,7 @@ class TextChangeUpdater {
 			// Replace s_id for subobjects etc. with the o_id
 			if ( $tableChangeOp->isFixedPropertyOp() ) {
 				$fieldChangeOp->set( 's_id', $fieldChangeOp->has( 'o_id' ) ? $fieldChangeOp->get( 'o_id' ) : $fieldChangeOp->get( 's_id' ) );
-				$fieldChangeOp->set( 'p_id', $tableChangeOp->getFixedPropertyValueBy( 'p_id' ) );
+				$fieldChangeOp->set( 'p_id', $tableChangeOp->getFixedPropertyValByField( 'p_id' ) );
 			}
 
 			if ( !$fieldChangeOp->has( 'p_id' ) ) {

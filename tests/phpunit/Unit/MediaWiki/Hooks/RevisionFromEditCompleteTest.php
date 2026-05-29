@@ -5,10 +5,14 @@ namespace SMW\Tests\Unit\MediaWiki\Hooks;
 use Exception;
 use MediaWiki\Parser\ParserOutput;
 use MediaWiki\Title\Title;
-use Onoi\EventDispatcher\EventDispatcher;
+use MediaWiki\User\User;
+use MediaWiki\User\UserFactory;
+use MediaWiki\User\UserIdentity;
 use PHPUnit\Framework\TestCase;
+use SMW\EventDispatcher\EventDispatcher;
 use SMW\MediaWiki\EditInfo;
 use SMW\MediaWiki\Hooks\RevisionFromEditComplete;
+use SMW\MediaWiki\MwCollaboratorFactory;
 use SMW\MediaWiki\PageInfoProvider;
 use SMW\Property\AnnotatorFactory;
 use SMW\Property\Annotators\NullPropertyAnnotator;
@@ -18,6 +22,7 @@ use SMW\Schema\SchemaFactory;
 use SMW\SQLStore\SQLStore;
 use SMW\Store;
 use SMW\Tests\TestEnvironment;
+use WikiPage;
 
 /**
  * @covers \SMW\MediaWiki\Hooks\RevisionFromEditComplete
@@ -30,65 +35,46 @@ use SMW\Tests\TestEnvironment;
  */
 class RevisionFromEditCompleteTest extends TestCase {
 
-	private $semanticDataValidator;
 	private $testEnvironment;
 	private $eventDispatcher;
-	private $editInfo;
 	private $propertyAnnotatorFactory;
 	private $schemaFactory;
+	private $store;
+	private $mwCollaboratorFactory;
+	private $userFactory;
+	private $editInfo;
+	private $pageInfoProvider;
 
 	protected function setUp(): void {
 		parent::setUp();
 
 		$this->testEnvironment = new TestEnvironment();
 
-		$this->semanticDataValidator = $this->testEnvironment->getUtilityFactory()->newValidatorFactory()->newSemanticDataValidator();
-
-		$store = $this->getMockBuilder( Store::class )
+		$this->store = $this->getMockBuilder( Store::class )
 			->disableOriginalConstructor()
 			->getMockForAbstractClass();
 
-		$this->testEnvironment->registerObject( 'Store', $store );
+		$this->eventDispatcher = $this->createMock( EventDispatcher::class );
+		$this->schemaFactory = $this->createMock( SchemaFactory::class );
 
-		$this->eventDispatcher = $this->getMockBuilder( EventDispatcher::class )
-			->disableOriginalConstructor()
-			->getMock();
+		$nullAnnotator = $this->createMock( NullPropertyAnnotator::class );
+		$predefinedAnnotator = $this->createMock( PredefinedPropertyAnnotator::class );
+		$schemaAnnotator = $this->createMock( SchemaPropertyAnnotator::class );
 
-		$this->editInfo = $this->getMockBuilder( EditInfo::class )
-			->disableOriginalConstructor()
-			->getMock();
+		$this->propertyAnnotatorFactory = $this->createMock( AnnotatorFactory::class );
+		$this->propertyAnnotatorFactory->method( 'newNullPropertyAnnotator' )->willReturn( $nullAnnotator );
+		$this->propertyAnnotatorFactory->method( 'newPredefinedPropertyAnnotator' )->willReturn( $predefinedAnnotator );
+		$this->propertyAnnotatorFactory->method( 'newSchemaPropertyAnnotator' )->willReturn( $schemaAnnotator );
 
-		$nullAnnotator = $this->getMockBuilder( NullPropertyAnnotator::class )
-			->disableOriginalConstructor()
-			->getMock();
+		$this->editInfo = $this->createMock( EditInfo::class );
+		$this->pageInfoProvider = $this->createMock( PageInfoProvider::class );
 
-		$predefinedAnnotator = $this->getMockBuilder( PredefinedPropertyAnnotator::class )
-			->disableOriginalConstructor()
-			->getMock();
+		$this->mwCollaboratorFactory = $this->createMock( MwCollaboratorFactory::class );
+		$this->mwCollaboratorFactory->method( 'newEditInfo' )->willReturn( $this->editInfo );
+		$this->mwCollaboratorFactory->method( 'newPageInfoProvider' )->willReturn( $this->pageInfoProvider );
 
-		$schemaAnnotator = $this->getMockBuilder( SchemaPropertyAnnotator::class )
-			->disableOriginalConstructor()
-			->getMock();
-
-		$this->propertyAnnotatorFactory = $this->getMockBuilder( AnnotatorFactory::class )
-			->disableOriginalConstructor()
-			->getMock();
-
-		$this->propertyAnnotatorFactory->expects( $this->any() )
-			->method( 'newNullPropertyAnnotator' )
-			->willReturn( $nullAnnotator );
-
-		$this->propertyAnnotatorFactory->expects( $this->any() )
-			->method( 'newPredefinedPropertyAnnotator' )
-			->willReturn( $predefinedAnnotator );
-
-		$this->propertyAnnotatorFactory->expects( $this->any() )
-			->method( 'newSchemaPropertyAnnotator' )
-			->willReturn( $schemaAnnotator );
-
-		$this->schemaFactory = $this->getMockBuilder( SchemaFactory::class )
-			->disableOriginalConstructor()
-			->getMock();
+		$this->userFactory = $this->createMock( UserFactory::class );
+		$this->userFactory->method( 'newFromUserIdentity' )->willReturn( $this->createMock( User::class ) );
 	}
 
 	protected function tearDown(): void {
@@ -96,122 +82,86 @@ class RevisionFromEditCompleteTest extends TestCase {
 		parent::tearDown();
 	}
 
-	public function testCanConstruct() {
-		$pageInfoProvider = $this->getMockBuilder( PageInfoProvider::class )
-			->disableOriginalConstructor()
-			->getMock();
+	private function newInstance( ?Store $store = null ): RevisionFromEditComplete {
+		return new RevisionFromEditComplete(
+			$this->propertyAnnotatorFactory,
+			$this->schemaFactory,
+			$store ?? $this->store,
+			$this->eventDispatcher,
+			$this->mwCollaboratorFactory,
+			$this->userFactory
+		);
+	}
 
+	private function newWikiPageWithTitle( Title $title ): WikiPage {
+		$wikiPage = $this->createMock( WikiPage::class );
+		$wikiPage->method( 'getTitle' )->willReturn( $title );
+		return $wikiPage;
+	}
+
+	public function testCanConstruct() {
 		$this->assertInstanceOf(
 			RevisionFromEditComplete::class,
-			new RevisionFromEditComplete( $this->editInfo, $pageInfoProvider, $this->propertyAnnotatorFactory, $this->schemaFactory )
+			$this->newInstance()
 		);
 	}
 
 	public function testProcess_NoParserOutput() {
-		$pageInfoProvider = $this->getMockBuilder( PageInfoProvider::class )
-			->disableOriginalConstructor()
-			->getMock();
-
-		$title = $this->getMockBuilder( Title::class )
-			->disableOriginalConstructor()
-			->getMock();
+		$title = $this->createMock( Title::class );
 
 		$this->editInfo->expects( $this->once() )
 			->method( 'getOutput' )
 			->willReturn( null );
 
-		$this->schemaFactory->expects( $this->never() )
-			->method( 'newSchema' );
+		$this->schemaFactory->expects( $this->never() )->method( 'newSchema' );
+		$this->eventDispatcher->expects( $this->never() )->method( 'dispatch' );
 
-		$this->eventDispatcher->expects( $this->never() )
-			->method( 'dispatch' );
-
-		$instance = new RevisionFromEditComplete(
-			$this->editInfo,
-			$pageInfoProvider,
-			$this->propertyAnnotatorFactory,
-			$this->schemaFactory
+		$tags = [];
+		$this->newInstance()->onRevisionFromEditComplete(
+			$this->newWikiPageWithTitle( $title ),
+			null,
+			0,
+			$this->createMock( UserIdentity::class ),
+			$tags
 		);
-
-		$instance->setEventDispatcher(
-			$this->eventDispatcher
-		);
-
-		$instance->process( $title );
 	}
 
 	public function testProcess_OnSchemaNamespace() {
-		$parserOutput = $this->getMockBuilder( ParserOutput::class )
-			->disableOriginalConstructor()
-			->getMock();
+		$parserOutput = $this->createMock( ParserOutput::class );
 
-		$pageInfoProvider = $this->getMockBuilder( PageInfoProvider::class )
-			->disableOriginalConstructor()
-			->getMock();
+		$title = $this->createMock( Title::class );
+		$title->method( 'getDBKey' )->willReturn( 'Foo' );
+		$title->method( 'getNamespace' )->willReturn( SMW_NS_SCHEMA );
 
-		$title = $this->getMockBuilder( Title::class )
-			->disableOriginalConstructor()
-			->getMock();
+		$this->editInfo->method( 'getOutput' )->willReturn( $parserOutput );
 
-		$title->expects( $this->any() )
-			->method( 'getDBKey' )
-			->willReturn( 'Foo' );
-
-		$title->expects( $this->any() )
-			->method( 'getNamespace' )
-			->willReturn( SMW_NS_SCHEMA );
-
-		$this->editInfo->expects( $this->any() )
-			->method( 'getOutput' )
-			->willReturn( $parserOutput );
-
-		$this->schemaFactory->expects( $this->once() )
-			->method( 'newSchema' );
+		$this->schemaFactory->expects( $this->once() )->method( 'newSchema' );
 
 		$this->eventDispatcher->expects( $this->atLeastOnce() )
 			->method( 'dispatch' )
 			->withConsecutive(
 				[ $this->equalTo( 'InvalidateResultCache' ) ],
-				[ $this->equalTo( 'InvalidateEntityCache' ) ] );
+				[ $this->equalTo( 'InvalidateEntityCache' ) ]
+			);
 
-		$instance = new RevisionFromEditComplete(
-			$this->editInfo,
-			$pageInfoProvider,
-			$this->propertyAnnotatorFactory,
-			$this->schemaFactory
+		$tags = [];
+		$this->newInstance()->onRevisionFromEditComplete(
+			$this->newWikiPageWithTitle( $title ),
+			null,
+			0,
+			$this->createMock( UserIdentity::class ),
+			$tags
 		);
-
-		$instance->setEventDispatcher(
-			$this->eventDispatcher
-		);
-
-		$instance->process( $title );
 	}
 
 	public function testProcess_OnSchemaNamespace_InvalidSchema() {
-		$parserOutput = $this->getMockBuilder( ParserOutput::class )
-			->disableOriginalConstructor()
-			->getMock();
+		$parserOutput = $this->createMock( ParserOutput::class );
 
-		$pageInfoProvider = $this->getMockBuilder( PageInfoProvider::class )
-			->disableOriginalConstructor()
-			->getMock();
+		$title = $this->createMock( Title::class );
+		$title->method( 'getDBKey' )->willReturn( 'Foo' );
+		$title->method( 'getNamespace' )->willReturn( SMW_NS_SCHEMA );
 
-		$title = $this->getMockBuilder( Title::class )
-			->disableOriginalConstructor()
-			->getMock();
-
-		$title->expects( $this->any() )
-			->method( 'getDBKey' )
-			->willReturn( 'Foo' );
-
-		$title->expects( $this->any() )
-			->method( 'getNamespace' )
-			->willReturn( SMW_NS_SCHEMA );
-
-		$this->editInfo->expects( $this->any() )
-			->method( 'getOutput' )
-			->willReturn( $parserOutput );
+		$this->editInfo->method( 'getOutput' )->willReturn( $parserOutput );
 
 		$this->schemaFactory->expects( $this->once() )
 			->method( 'newSchema' )
@@ -221,77 +171,48 @@ class RevisionFromEditCompleteTest extends TestCase {
 			->method( 'dispatch' )
 			->withConsecutive(
 				[ $this->equalTo( 'InvalidateResultCache' ) ],
-				[ $this->equalTo( 'InvalidateEntityCache' ) ] );
+				[ $this->equalTo( 'InvalidateEntityCache' ) ]
+			);
 
-		$instance = new RevisionFromEditComplete(
-			$this->editInfo,
-			$pageInfoProvider,
-			$this->propertyAnnotatorFactory,
-			$this->schemaFactory
+		$tags = [];
+		$this->newInstance()->onRevisionFromEditComplete(
+			$this->newWikiPageWithTitle( $title ),
+			null,
+			0,
+			$this->createMock( UserIdentity::class ),
+			$tags
 		);
-
-		$instance->setEventDispatcher(
-			$this->eventDispatcher
-		);
-
-		$instance->process( $title );
 	}
 
 	public function testProcess_OnConceptNamespace() {
-		$store = $this->getMockBuilder( SQLStore::class )
-			->disableOriginalConstructor()
-			->getMock();
+		$store = $this->createMock( SQLStore::class );
+		$store->expects( $this->once() )->method( 'deleteConceptCache' );
 
-		$store->expects( $this->once() )
-			->method( 'deleteConceptCache' );
+		$parserOutput = $this->createMock( ParserOutput::class );
 
-		$this->testEnvironment->registerObject( 'Store', $store );
+		$title = $this->createMock( Title::class );
+		$title->method( 'getDBKey' )->willReturn( 'Foo' );
+		$title->method( 'getNamespace' )->willReturn( SMW_NS_CONCEPT );
 
-		$parserOutput = $this->getMockBuilder( ParserOutput::class )
-			->disableOriginalConstructor()
-			->getMock();
+		$this->editInfo->method( 'getOutput' )->willReturn( $parserOutput );
 
-		$pageInfoProvider = $this->getMockBuilder( PageInfoProvider::class )
-			->disableOriginalConstructor()
-			->getMock();
-
-		$title = $this->getMockBuilder( Title::class )
-			->disableOriginalConstructor()
-			->getMock();
-
-		$title->expects( $this->any() )
-			->method( 'getDBKey' )
-			->willReturn( 'Foo' );
-
-		$title->expects( $this->any() )
-			->method( 'getNamespace' )
-			->willReturn( SMW_NS_CONCEPT );
-
-		$this->editInfo->expects( $this->any() )
-			->method( 'getOutput' )
-			->willReturn( $parserOutput );
-
-		$this->schemaFactory->expects( $this->never() )
-			->method( 'newSchema' );
+		$this->schemaFactory->expects( $this->never() )->method( 'newSchema' );
 
 		$this->eventDispatcher->expects( $this->atLeastOnce() )
 			->method( 'dispatch' )
 			->withConsecutive(
 				[ $this->equalTo( 'InvalidateResultCache' ) ],
-				[ $this->equalTo( 'InvalidateEntityCache' ) ] );
+				[ $this->equalTo( 'InvalidateEntityCache' ) ]
+			);
 
-		$instance = new RevisionFromEditComplete(
-			$this->editInfo,
-			$pageInfoProvider,
-			$this->propertyAnnotatorFactory,
-			$this->schemaFactory
+		$tags = [];
+		$this->newInstance( $store )->onRevisionFromEditComplete(
+			$this->newWikiPageWithTitle( $title ),
+			null,
+			0,
+			$this->createMock( UserIdentity::class ),
+			$tags
 		);
-
-		$instance->setEventDispatcher(
-			$this->eventDispatcher
-		);
-
-		$instance->process( $title );
 	}
 
 }

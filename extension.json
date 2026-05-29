@@ -25,20 +25,444 @@
 		"SMW\\": "src/",
 		"SMW\\Maintenance\\": "maintenance/"
 	},
+	"ServiceWiringFiles": [
+		"src/Services/ServiceWiring.php"
+	],
 	"TestAutoloadNamespaces": {
 		"SMW\\Tests\\": "tests/phpunit/"
 	},
 	"Hooks": {
-		"CanonicalNamespaces": "SMW\\MediaWiki\\Hooks::onCanonicalNamespaces"
+		"CanonicalNamespaces": "SemanticMediaWiki.CanonicalNamespaces",
+		"ParserAfterTidy": "SemanticMediaWiki.ParserAfterTidy",
+		"ParserClearState": "SemanticMediaWiki.ParserClearState",
+		"ParserOptionsRegister": "SemanticMediaWiki.ParserOptionsRegister",
+		"ParserFirstCallInit": "SemanticMediaWiki.ParserFirstCallInit",
+		"InternalParseBeforeLinks": "SemanticMediaWiki.InternalParseBeforeLinks",
+		"RejectParserCacheValue": "SemanticMediaWiki.RejectParserCacheValue",
+		"SkinAfterContent": "SemanticMediaWiki.SkinAfterContent",
+		"OutputPageParserOutput": "SemanticMediaWiki.OutputPageParserOutput",
+		"OutputPageCheckLastModified": "SemanticMediaWiki.OutputPageCheckLastModified",
+		"BeforePageDisplay": "SemanticMediaWiki.BeforePageDisplay",
+		"BeforeDisplayNoArticleText": "SemanticMediaWiki.BeforeDisplayNoArticleText",
+		"EditPage::showEditForm:initial": "SemanticMediaWiki.EditPageShowEditFormInitial",
+		"PageMoveComplete": "SemanticMediaWiki.PageMoveComplete",
+		"TitleIsAlwaysKnown": "SemanticMediaWiki.TitleIsAlwaysKnown",
+		"TitleQuickPermissions": "SemanticMediaWiki.TitleQuickPermissions",
+		"TitleIsMovable": "SemanticMediaWiki.TitleIsMovable",
+		"ArticlePurge": "SemanticMediaWiki.ArticlePurge",
+		"ArticleDelete": "SemanticMediaWiki.ArticleDelete",
+		"ArticleFromTitle": "SemanticMediaWiki.ArticleFromTitle",
+		"ArticleProtectComplete": "SemanticMediaWiki.ArticleProtectComplete",
+		"ArticleViewHeader": "SemanticMediaWiki.ArticleViewHeader",
+		"RevisionFromEditComplete": "SemanticMediaWiki.RevisionFromEditComplete",
+		"LinksUpdateComplete": "SemanticMediaWiki.LinksUpdateComplete",
+		"FileUpload": "SemanticMediaWiki.FileUpload",
+		"MaintenanceUpdateAddParams": "SemanticMediaWiki.MaintenanceUpdateAddParams",
+		"ResourceLoaderGetConfigVars": "SemanticMediaWiki.ResourceLoaderGetConfigVars",
+		"GetPreferences": "SemanticMediaWiki.GetPreferences",
+		"SkinTemplateNavigation::Universal": "SemanticMediaWiki.SkinTemplateNavigationUniversal",
+		"SidebarBeforeOutput": "SemanticMediaWiki.SidebarBeforeOutput",
+		"LoadExtensionSchemaUpdates": "SemanticMediaWiki.LoadExtensionSchemaUpdates",
+		"ExtensionTypes": "SemanticMediaWiki.ExtensionTypes",
+		"SpecialStatsAddExtra": "SemanticMediaWiki.SpecialStatsAddExtra",
+		"SpecialSearchResultsPrepend": "SemanticMediaWiki.SpecialSearchResultsPrepend",
+		"SpecialSearchProfileForm": "SemanticMediaWiki.SpecialSearchProfileForm",
+		"SpecialSearchProfiles": "SemanticMediaWiki.SpecialSearchProfiles",
+		"SoftwareInfo": "SemanticMediaWiki.SoftwareInfo",
+		"BlockIpComplete": "SemanticMediaWiki.BlockIpComplete",
+		"UnblockUserComplete": "SemanticMediaWiki.UnblockUserComplete",
+		"UserGroupsChanged": "SemanticMediaWiki.UserGroupsChanged",
+		"SMW::SQLStore::AfterDataUpdateComplete": "SemanticMediaWiki.AfterDataUpdateComplete",
+		"SMW::SQLStore::Installer::AfterCreateTablesComplete": "SemanticMediaWiki.AfterCreateTablesComplete",
+		"SMW::Store::BeforeQueryResultLookupComplete": "SemanticMediaWiki.BeforeQueryResultLookupComplete",
+		"SMW::Store::AfterQueryResultLookupComplete": "SemanticMediaWiki.AfterQueryResultLookupComplete",
+		"SMW::Browse::AfterIncomingPropertiesLookupComplete": "SemanticMediaWiki.AfterIncomingPropertiesLookupComplete",
+		"SMW::Browse::BeforeIncomingPropertyValuesFurtherLinkCreate": "SemanticMediaWiki.BeforeIncomingPropertyValuesFurtherLinkCreate",
+		"DeleteAccount": "SemanticMediaWiki.DeleteAccount",
+		"AdminLinks": "SemanticMediaWiki.AdminLinks",
+		"PageSchemasRegisterHandlers": "SemanticMediaWiki.PageSchemasRegisterHandlers",
+		"SMW::Event::RegisterEventListeners": "SemanticMediaWiki.Elastic.RegisterEventListeners",
+		"SMW::SQLStore::EntityReferenceCleanUpComplete": "SemanticMediaWiki.Elastic.EntityReferenceCleanUpComplete",
+		"SMW::Maintenance::AfterUpdateEntityCollationComplete": "SemanticMediaWiki.Elastic.AfterUpdateEntityCollationComplete",
+		"SMW::Indicator::EntityExaminer::RegisterDeferrableIndicatorProviders": "SemanticMediaWiki.Elastic.RegisterEntityExaminerDeferrableIndicatorProviders",
+		"SMW::Admin::RegisterTaskHandlers": "SemanticMediaWiki.Elastic.RegisterTaskHandlers"
+	},
+	"HookHandlers": {
+		"SemanticMediaWiki.CanonicalNamespaces": {
+			"class": "SMW\\MediaWiki\\Hooks\\CanonicalNamespaces"
+		},
+		"SemanticMediaWiki.ParserAfterTidy": {
+			"class": "SMW\\MediaWiki\\Hooks\\ParserAfterTidy",
+			"services": [
+				"SMW.NamespaceExaminer",
+				"SMW.Cache",
+				"SMW.ApplicationFactory",
+				"HookContainer",
+				"SMW.Settings",
+				"SMW.Logger",
+				"RestrictionStore"
+			]
+		},
+		"SemanticMediaWiki.ParserClearState": {
+			"class": "SMW\\MediaWiki\\Hooks\\ParserClearState"
+		},
+		"SemanticMediaWiki.ParserOptionsRegister": {
+			"class": "SMW\\MediaWiki\\Hooks\\ParserOptionsRegister"
+		},
+		"SemanticMediaWiki.ParserFirstCallInit": {
+			"class": "SMW\\MediaWiki\\Hooks\\ParserFirstCallInit",
+			"services": [
+				"SMW.ParserFunctionFactory",
+				"SMW.Settings"
+			]
+		},
+		"SemanticMediaWiki.InternalParseBeforeLinks": {
+			"class": "SMW\\MediaWiki\\Hooks\\InternalParseBeforeLinks",
+			"services": [
+				"SMW.Settings",
+				"SMW.ParserDataFactory",
+				"SMW.InTextAnnotationParserFactory",
+				"SMW.MwCollaboratorFactory"
+			]
+		},
+		"SemanticMediaWiki.RejectParserCacheValue": {
+			"class": "SMW\\MediaWiki\\Hooks\\RejectParserCacheValue",
+			"services": [
+				"SMW.NamespaceExaminer",
+				"SMW.Logger",
+				"SMW.DependencyValidatorFactory"
+			]
+		},
+		"SemanticMediaWiki.SkinAfterContent": {
+			"class": "SMW\\MediaWiki\\Hooks\\SkinAfterContent",
+			"services": [
+				"SMW.FactboxFactory"
+			]
+		},
+		"SemanticMediaWiki.OutputPageParserOutput": {
+			"class": "SMW\\MediaWiki\\Hooks\\OutputPageParserOutput",
+			"services": [
+				"SMW.NamespaceExaminer",
+				"SMW.FactboxText",
+				"SMW.FactboxFactory",
+				"UserOptionsLookup",
+				"SMW.PermissionManager",
+				"SMW.IndicatorRegistryFactory",
+				"SMW.PostProcHandlerFactory",
+				"SMW.InTextAnnotationParserFactory",
+				"SMW.Logger"
+			]
+		},
+		"SemanticMediaWiki.OutputPageCheckLastModified": {
+			"class": "SMW\\MediaWiki\\Hooks\\OutputPageCheckLastModified"
+		},
+		"SemanticMediaWiki.BeforePageDisplay": {
+			"class": "SMW\\MediaWiki\\Hooks\\BeforePageDisplay",
+			"services": [
+				"UserOptionsLookup",
+				"SMW.Settings",
+				"SMW.SetupFile"
+			]
+		},
+		"SemanticMediaWiki.BeforeDisplayNoArticleText": {
+			"class": "SMW\\MediaWiki\\Hooks\\BeforeDisplayNoArticleText"
+		},
+		"SemanticMediaWiki.EditPageShowEditFormInitial": {
+			"class": "SMW\\MediaWiki\\Hooks\\EditPageForm",
+			"services": [
+				"SMW.NamespaceExaminer",
+				"UserOptionsLookup",
+				"SMW.Settings",
+				"SMW.PermissionManager"
+			]
+		},
+		"SemanticMediaWiki.PageMoveComplete": {
+			"class": "SMW\\MediaWiki\\Hooks\\PageMoveComplete",
+			"services": [
+				"SMW.NamespaceExaminer",
+				"SMW.Store",
+				"SMW.EventDispatcher"
+			]
+		},
+		"SemanticMediaWiki.TitleIsAlwaysKnown": {
+			"class": "SMW\\MediaWiki\\Hooks\\TitleIsAlwaysKnown"
+		},
+		"SemanticMediaWiki.TitleQuickPermissions": {
+			"class": "SMW\\MediaWiki\\Hooks\\TitleQuickPermissions",
+			"services": [
+				"SMW.NamespaceExaminer",
+				"SMW.TitlePermissions"
+			]
+		},
+		"SemanticMediaWiki.TitleIsMovable": {
+			"class": "SMW\\MediaWiki\\Hooks\\TitleIsMovable"
+		},
+		"SemanticMediaWiki.ArticlePurge": {
+			"class": "SMW\\MediaWiki\\Hooks\\ArticlePurge",
+			"services": [
+				"SMW.Store",
+				"SMW.Cache",
+				"SMW.Settings",
+				"SMW.EventDispatcher"
+			]
+		},
+		"SemanticMediaWiki.ArticleDelete": {
+			"class": "SMW\\MediaWiki\\Hooks\\ArticleDelete",
+			"services": [
+				"SMW.Store",
+				"SMW.JobFactory",
+				"SMW.EventDispatcher",
+				"SMW.SerializerFactory",
+				"SMW.ApplicationFactory"
+			]
+		},
+		"SemanticMediaWiki.ArticleFromTitle": {
+			"class": "SMW\\MediaWiki\\Hooks\\ArticleFromTitle",
+			"services": [
+				"SMW.Store"
+			]
+		},
+		"SemanticMediaWiki.ArticleProtectComplete": {
+			"class": "SMW\\MediaWiki\\Hooks\\ArticleProtectComplete",
+			"services": [
+				"SMW.Settings",
+				"SMW.Logger",
+				"SMW.MwCollaboratorFactory",
+				"SMW.RevisionGuard",
+				"SMW.DataItemFactory"
+			]
+		},
+		"SemanticMediaWiki.ArticleViewHeader": {
+			"class": "SMW\\MediaWiki\\Hooks\\ArticleViewHeader",
+			"services": [
+				"SMW.Store",
+				"SMW.NamespaceExaminer",
+				"SMW.Settings",
+				"SMW.DependencyValidatorFactory"
+			]
+		},
+		"SemanticMediaWiki.RevisionFromEditComplete": {
+			"class": "SMW\\MediaWiki\\Hooks\\RevisionFromEditComplete",
+			"services": [
+				"SMW.PropertyAnnotatorFactory",
+				"SMW.SchemaFactory",
+				"SMW.Store",
+				"SMW.EventDispatcher",
+				"SMW.MwCollaboratorFactory",
+				"UserFactory"
+			]
+		},
+		"SemanticMediaWiki.LinksUpdateComplete": {
+			"class": "SMW\\MediaWiki\\Hooks\\LinksUpdateComplete",
+			"services": [
+				"SMW.NamespaceExaminer",
+				"SMW.ContentParserFactory",
+				"SMW.RevisionGuard",
+				"SMW.SiteReadiness",
+				"SMW.Logger"
+			]
+		},
+		"SemanticMediaWiki.FileUpload": {
+			"class": "SMW\\MediaWiki\\Hooks\\FileUpload",
+			"services": [
+				"SMW.NamespaceExaminer",
+				"HookContainer",
+				"SMW.PageCreator",
+				"SMW.ParserDataFactory",
+				"SMW.MwCollaboratorFactory",
+				"SMW.PropertyAnnotatorFactory"
+			]
+		},
+		"SemanticMediaWiki.MaintenanceUpdateAddParams": {
+			"class": "SMW\\MediaWiki\\Hooks\\MaintenanceUpdateAddParams"
+		},
+		"SemanticMediaWiki.ResourceLoaderGetConfigVars": {
+			"class": "SMW\\MediaWiki\\Hooks\\ResourceLoaderGetConfigVars",
+			"services": [
+				"NamespaceInfo",
+				"SMW.Settings"
+			]
+		},
+		"SemanticMediaWiki.GetPreferences": {
+			"class": "SMW\\MediaWiki\\Hooks\\GetPreferences",
+			"services": [
+				"SMW.SchemaFactory",
+				"HookContainer",
+				"SMW.Settings",
+				"SMW.PermissionManager"
+			]
+		},
+		"SemanticMediaWiki.SkinTemplateNavigationUniversal": {
+			"class": "SMW\\MediaWiki\\Hooks\\SkinTemplateNavigationUniversal",
+			"services": [
+				"SMW.PersonalUrls"
+			]
+		},
+		"SemanticMediaWiki.SidebarBeforeOutput": {
+			"class": "SMW\\MediaWiki\\Hooks\\SidebarBeforeOutput",
+			"services": [
+				"SMW.NamespaceExaminer",
+				"SMW.Settings"
+			]
+		},
+		"SemanticMediaWiki.LoadExtensionSchemaUpdates": {
+			"class": "SMW\\MediaWiki\\Hooks\\ExtensionSchemaUpdates"
+		},
+		"SemanticMediaWiki.ExtensionTypes": {
+			"class": "SMW\\MediaWiki\\Hooks\\ExtensionTypes"
+		},
+		"SemanticMediaWiki.SpecialStatsAddExtra": {
+			"class": "SMW\\MediaWiki\\Hooks\\SpecialStatsAddExtra",
+			"services": [
+				"SMW.Store",
+				"SMW.DataTypeRegistry"
+			]
+		},
+		"SemanticMediaWiki.SpecialSearchResultsPrepend": {
+			"class": "SMW\\MediaWiki\\Hooks\\SpecialSearchResultsPrepend",
+			"services": [
+				"UserOptionsLookup"
+			]
+		},
+		"SemanticMediaWiki.SpecialSearchProfileForm": {
+			"class": "SMW\\MediaWiki\\Hooks\\SpecialSearchProfileForm",
+			"services": [
+				"SMW.Store",
+				"SearchEngineConfig"
+			]
+		},
+		"SemanticMediaWiki.SpecialSearchProfiles": {
+			"class": "SMW\\MediaWiki\\Hooks\\SpecialSearchProfiles",
+			"services": [
+				"SearchEngineConfig"
+			]
+		},
+		"SemanticMediaWiki.SoftwareInfo": {
+			"class": "SMW\\MediaWiki\\Hooks\\SoftwareInfo",
+			"services": [
+				"SMW.Store"
+			]
+		},
+		"SemanticMediaWiki.BlockIpComplete": {
+			"class": "SMW\\MediaWiki\\Hooks\\BlockIpComplete",
+			"services": [
+				"SMW.UserChange"
+			]
+		},
+		"SemanticMediaWiki.UnblockUserComplete": {
+			"class": "SMW\\MediaWiki\\Hooks\\UnblockUserComplete",
+			"services": [
+				"SMW.UserChange"
+			]
+		},
+		"SemanticMediaWiki.UserGroupsChanged": {
+			"class": "SMW\\MediaWiki\\Hooks\\UserGroupsChanged",
+			"services": [
+				"SMW.UserChange"
+			]
+		},
+		"SemanticMediaWiki.AfterDataUpdateComplete": {
+			"class": "SMW\\MediaWiki\\Hooks\\AfterDataUpdateComplete",
+			"services": [
+				"SMW.QueryDependencyLinksStoreFactory",
+				"SMW.FulltextSearchTableFactory"
+			]
+		},
+		"SemanticMediaWiki.AfterCreateTablesComplete": {
+			"class": "SMW\\MediaWiki\\Hooks\\AfterCreateTablesComplete",
+			"services": [
+				"SMW.ImporterServiceFactory",
+				"SMW.Settings"
+			]
+		},
+		"SemanticMediaWiki.BeforeQueryResultLookupComplete": {
+			"class": "SMW\\MediaWiki\\Hooks\\BeforeQueryResultLookupComplete"
+		},
+		"SemanticMediaWiki.AfterQueryResultLookupComplete": {
+			"class": "SMW\\MediaWiki\\Hooks\\AfterQueryResultLookupComplete",
+			"services": [
+				"SMW.QueryDependencyLinksStoreFactory"
+			]
+		},
+		"SemanticMediaWiki.AfterIncomingPropertiesLookupComplete": {
+			"class": "SMW\\MediaWiki\\Hooks\\AfterIncomingPropertiesLookupComplete",
+			"services": [
+				"SMW.QueryDependencyLinksStoreFactory"
+			]
+		},
+		"SemanticMediaWiki.BeforeIncomingPropertyValuesFurtherLinkCreate": {
+			"class": "SMW\\MediaWiki\\Hooks\\BeforeIncomingPropertyValuesFurtherLinkCreate",
+			"services": [
+				"SMW.QueryDependencyLinksStoreFactory"
+			]
+		},
+		"SemanticMediaWiki.DeleteAccount": {
+			"class": "SMW\\MediaWiki\\Hooks\\DeleteAccount",
+			"services": [
+				"SMW.NamespaceExaminer",
+				"SMW.ArticleDelete",
+				"TitleFactory"
+			]
+		},
+		"SemanticMediaWiki.AdminLinks": {
+			"class": "SMW\\MediaWiki\\Hooks\\AdminLinks"
+		},
+		"SemanticMediaWiki.PageSchemasRegisterHandlers": {
+			"class": "SMW\\MediaWiki\\Hooks\\PageSchemasRegisterHandlers"
+		},
+		"SemanticMediaWiki.Elastic.RegisterEventListeners": {
+			"class": "SMW\\Elastic\\Hooks\\RegisterEventListeners",
+			"services": [
+				"SMW.ElasticFactory"
+			]
+		},
+		"SemanticMediaWiki.Elastic.EntityReferenceCleanUpComplete": {
+			"class": "SMW\\Elastic\\Hooks\\EntityReferenceCleanUpComplete",
+			"services": [
+				"SMW.ElasticFactory"
+			]
+		},
+		"SemanticMediaWiki.Elastic.AfterUpdateEntityCollationComplete": {
+			"class": "SMW\\Elastic\\Hooks\\AfterUpdateEntityCollationComplete",
+			"services": [
+				"SMW.ElasticFactory"
+			]
+		},
+		"SemanticMediaWiki.Elastic.RegisterEntityExaminerDeferrableIndicatorProviders": {
+			"class": "SMW\\Elastic\\Hooks\\RegisterEntityExaminerDeferrableIndicatorProviders",
+			"services": [
+				"SMW.ElasticFactory",
+				"SMW.EntityCache"
+			]
+		},
+		"SemanticMediaWiki.Elastic.RegisterTaskHandlers": {
+			"class": "SMW\\Elastic\\Hooks\\RegisterTaskHandlers",
+			"services": [
+				"SMW.ElasticFactory"
+			]
+		}
 	},
 	"APIModules": {
-		"smwinfo": "SMW\\MediaWiki\\Api\\Info",
-		"smwtask": "SMW\\MediaWiki\\Api\\Task",
-		"smwbrowse": "SMW\\MediaWiki\\Api\\Browse",
-		"ask": "SMW\\MediaWiki\\Api\\Ask",
-		"askargs": "SMW\\MediaWiki\\Api\\AskArgs",
-		"browsebysubject": "SMW\\MediaWiki\\Api\\BrowseBySubject",
-		"browsebyproperty": "SMW\\MediaWiki\\Api\\BrowseByProperty"
+		"smwinfo": {
+			"class": "SMW\\MediaWiki\\Api\\Info",
+			"services": [ "SMW.Store", "SMW.JobQueue" ]
+		},
+		"smwtask": {
+			"class": "SMW\\MediaWiki\\Api\\Task",
+			"services": [ "SMW.TaskFactory" ]
+		},
+		"smwbrowse": {
+			"class": "SMW\\MediaWiki\\Api\\Browse",
+			"services": [ "SMW.Store", "SMW.Settings", "SMW.Cache", "TitleFactory" ]
+		},
+		"ask": {
+			"class": "SMW\\MediaWiki\\Api\\Ask",
+			"services": [ "SMW.QuerySourceFactory" ]
+		},
+		"askargs": {
+			"class": "SMW\\MediaWiki\\Api\\AskArgs",
+			"services": [ "SMW.QuerySourceFactory" ]
+		}
 	},
 	"AutoloadClasses": {
 		"SMWElasticStore": "src/Elastic/ElasticStore.php",
@@ -78,7 +502,6 @@
 		"SMWSpecialOWLExport": "src/MediaWiki/Specials/SpecialOWLExport.php",
 		"SMWSpecialTypes": "src/MediaWiki/Specials/SpecialTypes.php",
 		"SMW\\SpecialConcepts": "src/MediaWiki/Specials/SpecialConcepts.php",
-		"SMW\\SpecialPage": "src/MediaWiki/Specials/SpecialPage.php",
 		"SMW\\SpecialProperties": "src/MediaWiki/Specials/SpecialProperties.php",
 		"SMW\\SpecialUnusedProperties": "src/MediaWiki/Specials/SpecialUnusedProperties.php",
 		"SMW\\SpecialWantedProperties": "src/MediaWiki/Specials/SpecialWantedProperties.php",
@@ -122,6 +545,9 @@
 		"smw-vieweditpageinfo"
 	],
 	"GroupPermissions": {
+		"sysop": {
+			"smw-admin": true
+		},
 		"smwadministrator": {
 			"smw-admin": true
 		},
@@ -150,7 +576,10 @@
 		"smw/maintenance": "LogFormatter"
 	},
 	"ContentHandlers": {
-		"smw/schema": "SMW\\MediaWiki\\Content\\SchemaContentHandler"
+		"smw/schema": {
+			"class": "SMW\\MediaWiki\\Content\\SchemaContentHandler",
+			"services": [ "SMW.Store" ]
+		}
 	},
 	"QUnitTestModule": {
 		"ext.smw.tests": {
@@ -182,38 +611,137 @@
 	},
 	"SpecialPages": {
 		"ExportRDF": "SMW\\MediaWiki\\Specials\\SpecialOWLExport",
-		"SMWAdmin": "SMW\\MediaWiki\\Specials\\SpecialAdmin",
+		"SMWAdmin": {
+			"class": "SMW\\MediaWiki\\Specials\\SpecialAdmin",
+			"services": [ "SMW.Store", "SMW.Settings", "HookContainer", "SMW.JobFactory", "SMW.JobQueue" ]
+		},
 		"PendingTaskList": "SMW\\MediaWiki\\Specials\\SpecialPendingTaskList",
-		"Ask": "SMW\\MediaWiki\\Specials\\SpecialAsk",
-		"FacetedSearch": "SMW\\MediaWiki\\Specials\\SpecialFacetedSearch",
-		"Browse": "SMW\\MediaWiki\\Specials\\SpecialBrowse",
-		"Concepts": "SMW\\MediaWiki\\Specials\\SpecialConcepts",
-		"PageProperty": "SMW\\MediaWiki\\Specials\\SpecialPageProperty",
-		"SearchByProperty": "SMW\\MediaWiki\\Specials\\SpecialSearchByProperty",
-		"PropertyLabelSimilarity": "SMW\\MediaWiki\\Specials\\SpecialPropertyLabelSimilarity",
-		"ProcessingErrorList": "SMW\\MediaWiki\\Specials\\SpecialProcessingErrorList",
-		"MissingRedirectAnnotations": "SMW\\MediaWiki\\Specials\\SpecialMissingRedirectAnnotations",
-		"ConstraintErrorList": "SMW\\MediaWiki\\Specials\\SpecialConstraintErrorList",
-		"Types": "SMW\\MediaWiki\\Specials\\SpecialTypes",
+		"Ask": {
+			"class": "SMW\\MediaWiki\\Specials\\SpecialAsk",
+			"services": [ "SMW.QuerySourceFactory", "SMW.Settings" ]
+		},
+		"FacetedSearch": {
+			"class": "SMW\\MediaWiki\\Specials\\SpecialFacetedSearch",
+			"services": [ "SMW.Store", "SMW.SchemaFactory" ]
+		},
+		"Browse": {
+			"class": "SMW\\MediaWiki\\Specials\\SpecialBrowse",
+			"services": [ "SMW.Store", "SMW.Settings", "SMW.SerializerFactory" ]
+		},
+		"Concepts": {
+			"class": "SMW\\MediaWiki\\Specials\\SpecialConcepts",
+			"services": [ "SMW.Store" ]
+		},
+		"PageProperty": {
+			"class": "SMW\\MediaWiki\\Specials\\SpecialPageProperty",
+			"services": [ "SMW.Store" ]
+		},
+		"SearchByProperty": {
+			"class": "SMW\\MediaWiki\\Specials\\SpecialSearchByProperty",
+			"services": [ "SMW.Store", "SMW.Settings" ]
+		},
+		"PropertyLabelSimilarity": {
+			"class": "SMW\\MediaWiki\\Specials\\SpecialPropertyLabelSimilarity",
+			"services": [ "SMW.Store", "SMW.Settings", "SMW.QueryFactory" ]
+		},
+		"ProcessingErrorList": {
+			"class": "SMW\\MediaWiki\\Specials\\SpecialProcessingErrorList",
+			"services": [ "SMW.Settings" ]
+		},
+		"MissingRedirectAnnotations": {
+			"class": "SMW\\MediaWiki\\Specials\\SpecialMissingRedirectAnnotations",
+			"services": [ "SMW.Store", "SMW.Settings" ]
+		},
+		"ConstraintErrorList": {
+			"class": "SMW\\MediaWiki\\Specials\\SpecialConstraintErrorList",
+			"services": [ "SMW.Settings" ]
+		},
+		"Types": {
+			"class": "SMW\\MediaWiki\\Specials\\SpecialTypes",
+			"services": [ "SMW.Store", "SMW.Settings" ]
+		},
 		"URIResolver": "SMW\\MediaWiki\\Specials\\SpecialURIResolver",
-		"Properties": "SMW\\MediaWiki\\Specials\\SpecialProperties",
-		"UnusedProperties": "SMW\\MediaWiki\\Specials\\SpecialUnusedProperties",
-		"WantedProperties": "SMW\\MediaWiki\\Specials\\SpecialWantedProperties"
+		"Properties": {
+			"class": "SMW\\MediaWiki\\Specials\\SpecialProperties",
+			"services": [ "SMW.Store", "SMW.Settings" ]
+		},
+		"UnusedProperties": {
+			"class": "SMW\\MediaWiki\\Specials\\SpecialUnusedProperties",
+			"services": [ "SMW.Store", "SMW.Settings" ]
+		},
+		"WantedProperties": {
+			"class": "SMW\\MediaWiki\\Specials\\SpecialWantedProperties",
+			"services": [ "SMW.Store" ]
+		}
 	},
 	"JobClasses": {
-		"smw.update": "SMW\\MediaWiki\\Jobs\\UpdateJob",
-		"smw.refresh": "SMW\\MediaWiki\\Jobs\\RefreshJob",
-		"smw.updateDispatcher": "SMW\\MediaWiki\\Jobs\\UpdateDispatcherJob",
-		"smw.fulltextSearchTableUpdate": "SMW\\MediaWiki\\Jobs\\FulltextSearchTableUpdateJob",
-		"smw.entityIdDisposer": "SMW\\MediaWiki\\Jobs\\EntityIdDisposerJob",
-		"smw.propertyStatisticsRebuild": "SMW\\MediaWiki\\Jobs\\PropertyStatisticsRebuildJob",
-		"smw.fulltextSearchTableRebuild": "SMW\\MediaWiki\\Jobs\\FulltextSearchTableRebuildJob",
-		"smw.changePropagationDispatch": "SMW\\MediaWiki\\Jobs\\ChangePropagationDispatchJob",
-		"smw.changePropagationUpdate": "SMW\\MediaWiki\\Jobs\\ChangePropagationUpdateJob",
-		"smw.changePropagationClassUpdate": "SMW\\MediaWiki\\Jobs\\ChangePropagationClassUpdateJob",
-		"smw.deferredConstraintCheckUpdateJob": "SMW\\MediaWiki\\Jobs\\DeferredConstraintCheckUpdateJob",
-		"smw.elasticIndexerRecovery": "SMW\\Elastic\\Jobs\\IndexerRecoveryJob",
-		"smw.elasticFileIngest": "SMW\\Elastic\\Jobs\\FileIngestJob",
+		"smw.update": {
+			"class": "SMW\\MediaWiki\\Jobs\\UpdateJob",
+			"services": [
+				"SMW.Store",
+				"SMW.Settings",
+				"SMW.PageCreator",
+				"SMW.PageUpdaterFactory",
+				"SMW.SerializerFactory",
+				"SMW.ContentParserFactory",
+				"SMW.ParserDataFactory",
+				"SMW.Logger"
+			]
+		},
+		"smw.refresh": {
+			"class": "SMW\\MediaWiki\\Jobs\\RefreshJob",
+			"services": [ "SMW.Store", "SMW.JobFactory" ]
+		},
+		"smw.updateDispatcher": {
+			"class": "SMW\\MediaWiki\\Jobs\\UpdateDispatcherJob",
+			"services": [ "SMW.Store" ]
+		},
+		"smw.fulltextSearchTableUpdate": {
+			"class": "SMW\\MediaWiki\\Jobs\\FulltextSearchTableUpdateJob",
+			"services": [ "SMW.Store" ]
+		},
+		"smw.entityIdDisposer": {
+			"class": "SMW\\MediaWiki\\Jobs\\EntityIdDisposerJob",
+			"services": [ "SMW.Store", "SMW.IteratorFactory", "SMW.JobFactory" ]
+		},
+		"smw.propertyStatisticsRebuild": {
+			"class": "SMW\\MediaWiki\\Jobs\\PropertyStatisticsRebuildJob",
+			"services": [ "SMW.Store" ]
+		},
+		"smw.fulltextSearchTableRebuild": {
+			"class": "SMW\\MediaWiki\\Jobs\\FulltextSearchTableRebuildJob",
+			"services": [ "SMW.Store", "SMW.JobFactory" ]
+		},
+		"smw.changePropagationDispatch": {
+			"class": "SMW\\MediaWiki\\Jobs\\ChangePropagationDispatchJob",
+			"services": [
+				"SMW.Store",
+				"SMW.Cache",
+				"SMW.PropertySpecificationLookup",
+				"SMW.IteratorFactory",
+				"SMW.JobFactory"
+			]
+		},
+		"smw.changePropagationUpdate": {
+			"class": "SMW\\MediaWiki\\Jobs\\ChangePropagationUpdateJob",
+			"services": [ "SMW.JobFactory" ]
+		},
+		"smw.changePropagationClassUpdate": {
+			"class": "SMW\\MediaWiki\\Jobs\\ChangePropagationClassUpdateJob",
+			"services": [ "SMW.JobFactory" ]
+		},
+		"smw.deferredConstraintCheckUpdateJob": {
+			"class": "SMW\\MediaWiki\\Jobs\\DeferredConstraintCheckUpdateJob",
+			"services": [ "SMW.JobFactory" ]
+		},
+		"smw.elasticIndexerRecovery": {
+			"class": "SMW\\Elastic\\Jobs\\IndexerRecoveryJob",
+			"services": [ "SMW.Store", "SMW.Cache", "SMW.JobFactory" ]
+		},
+		"smw.elasticFileIngest": {
+			"class": "SMW\\Elastic\\Jobs\\FileIngestJob",
+			"services": [ "SMW.Store", "SMW.ElasticFactory", "SMW.JobFactory" ]
+		},
 		"smw.parserCachePurgeJob": "SMW\\MediaWiki\\Jobs\\ParserCachePurgeJob"
 	},
 	"ResourceFileModulePaths": {
@@ -495,6 +1023,12 @@
 			]
 		},
 		"ext.smw.browse.styles": {
+			"class": "MediaWiki\\ResourceLoader\\CodexModule",
+			"codexStyleOnly": true,
+			"codexComponents": [
+				"CdxButton",
+				"CdxTextInput"
+			],
 			"styles": [
 				"smw/special/ext.smw.special.browse.less"
 			]
@@ -728,6 +1262,10 @@
 	"load_composer_autoloader": true,
 	"config_prefix": "smwg",
 	"config": {
+		"AdminFeatures": {
+			"value": [ "refresh", "setup", "disposal", "pstats", "fullt", "maintenance-script-docs", "show-overview", "alert-last-optimization-run" ],
+			"description": "Special:Admin feature flags. Array of any of: `refresh`, `setup`, `disposal`, `pstats`, `fullt`, `maintenance-script-docs`, `show-overview`, `alert-last-optimization-run`. Legacy `SMW_ADM_*` integer constants are accepted with a deprecation notice in 7.x and will be removed in 8.0."
+		},
 		"AllowRecursiveExport": {
 			"value": false,
 			"description": "When `true`, normal users can request recursive OWL/RDF exports."
@@ -747,6 +1285,10 @@
 		"ChangePropagationProtection": {
 			"value": true,
 			"description": "When `true`, protects an active change propagation from being disabled without administrative intervention."
+		},
+		"BrowseFeatures": {
+			"value": [ "toolbox-link", "show-incoming", "show-group", "use-api" ],
+			"description": "Special:Browse feature flags. Array of any of: `toolbox-link`, `show-inverse`, `show-incoming`, `show-group`, `show-sortkey`, `use-api`. Legacy `SMW_BROWSE_*` integer constants are accepted with a deprecation notice in 7.x and will be removed in 8.0."
 		},
 		"CacheUsage": {
 			"value": {
@@ -769,6 +1311,14 @@
 			"description": "Property IDs that trigger full re-processing of dependent pages when their values change.",
 			"merge_strategy": "provide_default"
 		},
+		"CategoryFeatures": {
+			"value": [ "redirect", "instance", "hierarchy" ],
+			"description": "Category feature flags. Array of any of: `redirect`, `instance`, `hierarchy`. Legacy `SMW_CAT_*` integer constants are accepted with a deprecation notice in 7.x and will be removed in 8.0."
+		},
+		"CheckForConstraintErrors": {
+			"value": "check/all",
+			"description": "Property-constraint error checking. Accepts `false` (= `SMW_CONSTRAINT_ERR_CHECK_NONE`, off), `\"check/main\"` (= `SMW_CONSTRAINT_ERR_CHECK_MAIN`, main-data-only), or `\"check/all\"` (= `SMW_CONSTRAINT_ERR_CHECK_ALL`, all entities). The `SMW_CONSTRAINT_ERR_CHECK_*` constants resolve to these string values and continue to work."
+		},
 		"CheckForRemnantEntities": {
 			"value": "purge",
 			"description": "Controls when remnant entity checks run: `\"purge\"` (on purge only), `true` (every update), or `false` (disabled)."
@@ -779,7 +1329,7 @@
 		},
 		"ConfigFileDir": {
 			"value": "",
-			"description": "Directory used to persistently store SMW configuration files (`.smw.json`, `.smw.maintenance.json`). The directory must be writable. Defaults to the extension root; you may point it to `$wgUploadDirectory` or any other writable location.",
+			"description": "Deprecated since 7.0.0; will be removed in 8.0.0. Install-state metadata is now stored in the `smw_meta` database table. This setting is kept only so that the one-shot migration of any pre-existing `.smw.json` file can find its source location. Historical default: the extension root; sites that overrode it (for example to `$wgUploadDirectory`) must keep the override in place until `update.php` has run once and migrated the file to `.smw.json.migrated`.",
 			"path": true
 		},
 		"CreateProtectionRight": {
@@ -790,6 +1340,10 @@
 			"value": ["Record", "Reference", "Keyword"],
 			"description": "DataTypes exempted from the automatic corresponding-property registration.",
 			"merge_strategy": "provide_default"
+		},
+		"DVFeatures": {
+			"value": [ "provider-redirect", "monolingual-langcode", "pattern-validation", "wpv-display-title", "time-calendar-model", "preferred-label", "provider-link-hint" ],
+			"description": "DataValue feature flags. Array of any of: `provider-redirect`, `monolingual-langcode`, `number-value-usespaces`, `pattern-validation`, `wpv-display-title`, `provider-display-title`, `unique-constraint`, `time-calendar-model`, `preferred-label`, `provider-link-hint`, `wpv-pipetrick`. Legacy `SMW_DV_*` integer constants are accepted with a deprecation notice in 7.x and will be removed in 8.0."
 		},
 		"DefaultLoggerRole": {
 			"value": "production",
@@ -889,10 +1443,18 @@
 			"value": true,
 			"description": "When `true`, resources are exported as IRIs (RFC 3987) instead of ASCII-encoded URIs."
 		},
+		"ExperimentalFeatures": {
+			"value": [ "queryresult-prefetch", "showparser-curtailment" ],
+			"description": "Experimental feature flags. Array of any of: `queryresult-prefetch`, `showparser-curtailment`. Legacy `SMW_QUERYRESULT_*` / `SMW_SHOWPARSER_*` integer constants are accepted with a deprecation notice in 7.x and will be removed in 8.0."
+		},
 		"ExtraneousLanguageFileDir": {
 			"value": "i18n/extra",
 			"description": "Directory containing SMW-specific i18n files for extraneous language data (unit labels, property aliases, etc.).",
 			"path": true
+		},
+		"FactboxFeatures": {
+			"value": [ "cache", "purge-refresh", "display-subobject", "display-attachment" ],
+			"description": "Factbox feature flags. Array of any of: 'cache', 'purge-refresh', 'display-subobject', 'display-attachment'. Legacy `SMW_FACTBOX_*` integer constants are accepted with a deprecation notice in 7.x and will be removed in 8.0."
 		},
 		"FallbackSearchType": {
 			"value": null,
@@ -900,7 +1462,7 @@
 		},
 		"FieldTypeFeatures": {
 			"value": false,
-			"description": "SQLStore field-type modifications (case-insensitive collation / extended field width); `false` (= `SMW_FIELDT_NONE`) disables all flags."
+			"description": "SQLStore field-type modifications. `false` (= `SMW_FIELDT_NONE`) disables all flags and skips field-type registration entirely; an array of `\"char-nocase\"` and/or `\"char-long\"` enables case-insensitive collation / extended field width respectively. Legacy `SMW_FIELDT_*` integer constants are accepted with a deprecation notice in 7.x and will be removed in 8.0."
 		},
 		"FixedProperties": {
 			"value": [],
@@ -915,6 +1477,10 @@
 			"value": [],
 			"description": "Language-detector configurations for fulltext indexing; empty disables language detection.",
 			"merge_strategy": "array_plus"
+		},
+		"FulltextSearchIndexableDataTypes": {
+			"value": [ "blob", "uri" ],
+			"description": "DataTypes whose values are eligible for fulltext indexing. Array of any of: `blob`, `uri`, `wikipage`. Legacy `SMW_FT_*` integer constants are accepted with a deprecation notice in 7.x and will be removed in 8.0."
 		},
 		"FulltextSearchMinTokenSize": {
 			"value": 3,
@@ -1024,6 +1590,10 @@
 			"value": false,
 			"description": "When `true`, `format=list` produces plain lists without HTML markup, restoring pre-3.0 behaviour."
 		},
+		"ParserFeatures": {
+			"value": [ "strict", "inline-errors", "hidden-categories" ],
+			"description": "Parser feature flags. Array of any of: `strict`, `unstrip`, `inline-errors`, `hidden-categories`, `links-in-values`. Legacy `SMW_PARSER_*` integer constants are accepted with a deprecation notice in 7.x and will be removed in 8.0."
+		},
 		"PostEditUpdate": {
 			"value": {
 				"check-query": false,
@@ -1077,6 +1647,10 @@
 			"value": 1440,
 			"description": "Concept cache lifetime in minutes; SMW recomputes an older cache if this threshold is exceeded."
 		},
+		"QConceptCaching": {
+			"value": "hard",
+			"description": "Concept-cache use policy. Accepts `\"none\"`, `\"hard\"`, or `\"all\"`. Legacy `CONCEPT_CACHE_*` integer constants are accepted with a deprecation notice in 7.x and will be removed in 8.0."
+		},
 		"QConceptMaxDepth": {
 			"value": 8,
 			"description": "Maximum property-chain depth for a concept query."
@@ -1084,6 +1658,10 @@
 		"QConceptMaxSize": {
 			"value": 20,
 			"description": "Maximum number of conditions permitted in a concept query."
+		},
+		"QConceptFeatures": {
+			"value": [ "property", "category", "concept", "namespace", "conjunction", "disjunction" ],
+			"description": "Query feature flags applied to concept-page query parsing. Array of any of: `property`, `category`, `concept`, `namespace`, `conjunction`, `disjunction`. Legacy `SMW_*_QUERY` integer constants are accepted with a deprecation notice in 7.x and will be removed in 8.0."
 		},
 		"QDefaultLimit": {
 			"value": 50,
@@ -1101,6 +1679,10 @@
 			"value": true,
 			"description": "Master switch to enable or disable all query-related features and interfaces."
 		},
+		"QEqualitySupport": {
+			"value": "some",
+			"description": "Inverse / equality property handling: `\"none\"` disables, `\"some\"` enables redirects (default), `\"full\"` enables redirects and owl:sameAs. Legacy `SMW_EQ_*` integer constants are accepted with a deprecation notice in 7.x and will be removed in 8.0."
+		},
 		"QExpensiveExecutionLimit": {
 			"value": false,
 			"description": "Maximum number of expensive `#ask` / `#show` calls per page; `false` means no limit."
@@ -1108,6 +1690,10 @@
 		"QExpensiveThreshold": {
 			"value": 10,
 			"description": "Time in seconds above which a `#ask` / `#show` call is classified as expensive."
+		},
+		"QFeatures": {
+			"value": [ "property", "category", "concept", "namespace", "conjunction", "disjunction" ],
+			"description": "Query feature flags. Array of any of: `property`, `category`, `concept`, `namespace`, `conjunction`, `disjunction`. Each enables the matching query type in inline queries; removing one disables it (e.g. drop `disjunction` to forbid OR clauses). Legacy `SMW_*_QUERY` integer constants are accepted with a deprecation notice in 7.x and will be removed in 8.0."
 		},
 		"QFilterDuplicates": {
 			"value": false,
@@ -1133,6 +1719,10 @@
 			"value": 100,
 			"description": "Maximum number of printout columns (`?`-statements) supported in a single query."
 		},
+		"QSortFeatures": {
+			"value": [ "sort", "random" ],
+			"description": "Sort feature flags. Array of any of: `sort` (allow sorting), `random` (allow random ordering), `unconditional` (allow unconditional sort). Legacy `SMW_QSORT*` integer constants are accepted with a deprecation notice in 7.x and will be removed in 8.0."
+		},
 		"QStrictComparators": {
 			"value": false,
 			"description": "Canonical spelling of `smwStrictComparators`; same semantics."
@@ -1155,8 +1745,8 @@
 			"merge_strategy": "provide_default"
 		},
 		"QueryProfiler": {
-			"value": true,
-			"description": "When `false`, disables the query profiler; can be set to a bitmask of `SMW_QPRFL_*` constants for granular control."
+			"value": [],
+			"description": "Query profiler. Accepts `false` to disable profiling entirely, `[]` for basic profiling, or an array of any of `parameters`, `duration` for granular detail fields. Note that `[]` enables basic profiling (it does NOT disable); use `false` to disable. Legacy `true` (alias for `[]`) and `SMW_QPRFL_*` integer constants are accepted with a deprecation notice in 7.x and will be removed in 8.0."
 		},
 		"QueryResultCacheLifetime": {
 			"value": 604800,
@@ -1182,6 +1772,10 @@
 		"QUseLegacyQuery": {
 			"value": false,
 			"description": "When `true`, reverts to the pre-7.x `SELECT DISTINCT` query shape instead of the derived-table rewrite."
+		},
+		"RemoteReqFeatures": {
+			"value": [ "send-response", "show-note" ],
+			"description": "Remote-query feature flags. Array of any of: `send-response` (allow the remote wiki to respond to a query), `show-note` (display a hint when the result came from a remote source). Legacy `SMW_REMOTE_REQ_*` integer constants are accepted with a deprecation notice in 7.x and will be removed in 8.0."
 		},
 		"ResultAliases": {
 			"value": {
@@ -1215,6 +1809,10 @@
 			"description": "Predefined result formats for queries.",
 			"merge_strategy": "array_plus"
 		},
+		"ResultFormatsFeatures": {
+			"value": "template-outsep",
+			"description": "Result-formatter feature. Accepts `\"none\"` or `\"template-outsep\"`. Legacy `SMW_RF_*` integer constants are accepted with a deprecation notice in 7.x and will be removed in 8.0."
+		},
 		"SearchByPropertyFuzzy": {
 			"value": ["_num", "_txt", "_dat", "_mlt_rec"],
 			"description": "Type IDs for which Special:SearchByProperty displays nearby fuzzy results when exact matches are few.",
@@ -1226,13 +1824,21 @@
 			"path": true
 		},
 		"SetParserCacheKeys": {
-			"value": ["userlang", "dateformat"],
+			"value": ["userlang"],
 			"description": "Session keys added to the parser cache key, each causing additional cache fragmentation.",
 			"merge_strategy": "provide_default"
 		},
 		"SetParserCacheTimestamp": {
 			"value": true,
 			"description": "When `true`, sets a timestamp on `ParserOutput` to allow immediate parser-cache invalidation."
+		},
+		"ShowFactbox": {
+			"value": "hidden",
+			"description": "Default factbox visibility on page view. Accepts 'hidden', 'special', 'nonempty', or 'shown'. Legacy `SMW_FACTBOX_HIDDEN`/`SPECIAL`/`NONEMPTY`/`SHOWN` integer constants are accepted with a deprecation notice in 7.x and will be removed in 8.0."
+		},
+		"ShowFactboxEdit": {
+			"value": "nonempty",
+			"description": "Factbox visibility on the edit form. Accepts the same values as `smwgShowFactbox`. Legacy `SMW_FACTBOX_*` integer constants are accepted with a deprecation notice in 7.x and will be removed in 8.0."
 		},
 		"SimilarityLookupExemptionProperty": {
 			"value": "owl:differentFrom",
@@ -1255,6 +1861,10 @@
 			"value": "",
 			"description": "Default graph URI for the SPARQL repository, analogous to a database name in relational stores."
 		},
+		"SparqlQFeatures": {
+			"value": [ "redirects", "subproperties", "subcategories" ],
+			"description": "SPARQL query feature flags. Array of any of: `redirects`, `subproperties`, `subcategories`, `collation`, `no-case`. Legacy `SMW_SPARQL_QF_*` integer constants are accepted with a deprecation notice in 7.x and will be removed in 8.0."
+		},
 		"SparqlReplicationPropertyExemptionList": {
 			"value": [],
 			"description": "Properties exempted from the SPARQL replication process.",
@@ -1263,6 +1873,14 @@
 		"SparqlRepositoryConnector": {
 			"value": "default",
 			"description": "Pre-deployed SPARQL repository connector to use (`default`, `4store`, `blazegraph`, `fuseki`, `sesame`, `virtuoso`, or `custom`)."
+		},
+		"SparqlRepositoryFeatures": {
+			"value": "none",
+			"description": "SPARQL repository feature flags. Accepts `\"none\"` or `\"connection-ping\"`. Legacy `SMW_SPARQL_NONE`/`CONNECTION_PING` integer constants are accepted with a deprecation notice in 7.x and will be removed in 8.0."
+		},
+		"SpecialAskFormSubmitMethod": {
+			"value": "post",
+			"description": "Form submit method on Special:Ask. Accepts `\"get\"`, `\"get.redirect\"`, or `\"post\"`. The `SMW_SASK_SUBMIT_*` constants resolve to these string values and continue to work."
 		},
 		"SupportSectionTag": {
 			"value": true,

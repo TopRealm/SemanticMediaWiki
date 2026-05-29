@@ -10,6 +10,7 @@ use SMW\Query\Result\ItemFetcher;
 use SMW\Query\Result\ItemJournal;
 use SMW\Query\Result\ResultArray;
 use SMW\SerializerFactory;
+use SMW\Services\ServicesFactory;
 use SMW\Store;
 
 /**
@@ -87,6 +88,16 @@ class QueryResult {
 
 	private FilterMap $filterMap;
 
+	/**
+	 * Opaque next-page cursor token, set by `QueryEngine` when the query
+	 * was run in keyset cursor mode and there are further results. Stays
+	 * `null` for legacy offset-mode queries and for cursor-mode queries
+	 * on the final page.
+	 *
+	 * @since 7.0.0
+	 */
+	private ?string $nextCursor = null;
+
 	public function __construct(
 		array $printRequests,
 		Query $query,
@@ -104,7 +115,11 @@ class QueryResult {
 		$itemFetcher = new ItemFetcher( $store, $this->mResults );
 
 		// Used temporarily to allow switching back while testing
-		$itemFetcher->setPrefetchFlag( $GLOBALS['smwgExperimentalFeatures'] );
+		// Read via Settings (not $GLOBALS directly) so the value goes through
+		// LegacyConstantNormalizer's array-of-strings normalization (#6586).
+		$itemFetcher->setPrefetchFlag(
+			ServicesFactory::getInstance()->getSettings()->get( 'smwgExperimentalFeatures' )
+		);
 
 		// Init the instance here so the value cache is shared and hereby avoids
 		// a static declaration
@@ -325,9 +340,32 @@ class QueryResult {
 	}
 
 	/**
+	 * Set the opaque next-page cursor token. Called by `QueryEngine`
+	 * when the query was run in keyset cursor mode and there are
+	 * further results to fetch.
+	 *
+	 * @since 7.0.0
+	 */
+	public function setNextCursor( string $token ): void {
+		$this->nextCursor = $token;
+	}
+
+	/**
+	 * The opaque next-page cursor token, or `null` when not applicable
+	 * (legacy offset-mode, or cursor mode but on the final page).
+	 * Consumers (the Ask API renderer) surface this as
+	 * `query-continue-cursor` in the response.
+	 *
+	 * @since 7.0.0
+	 */
+	public function getNextCursor(): ?string {
+		return $this->nextCursor;
+	}
+
+	/**
 	 * @since  2.0
 	 *
-	 * @param int $countValue
+	 * @param int|string $countValue
 	 */
 	public function setCountValue( $countValue ): void {
 		$this->countValue = (int)$countValue;
@@ -396,7 +434,7 @@ class QueryResult {
 	 * @return array
 	 */
 	public function serializeToArray(): array {
-		$serializerFactory = new SerializerFactory();
+		$serializerFactory = new SerializerFactory( $this->mStore );
 		$serializer = $serializerFactory->newQueryResultSerializer();
 		$serializer->version( $this->serializer_version );
 

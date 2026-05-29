@@ -2,12 +2,13 @@
 
 namespace SMW\Tests\Unit;
 
-use Onoi\EventDispatcher\EventDispatcher;
+use Onoi\Cache\FixedInMemoryLruCache;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
 use SMW\DataItems\WikiPage;
 use SMW\DependencyValidator;
 use SMW\EntityCache;
+use SMW\EventDispatcher\EventDispatcher;
 use SMW\NamespaceExaminer;
 use SMW\SQLStore\QueryDependency\DependencyLinksValidator;
 use SMW\Tests\TestEnvironment;
@@ -28,6 +29,7 @@ class DependencyValidatorTest extends TestCase {
 	private $namespaceExaminer;
 	private $entityCache;
 	private $logger;
+	private $eventDispatcher;
 
 	protected function setUp(): void {
 		parent::setUp();
@@ -49,6 +51,10 @@ class DependencyValidatorTest extends TestCase {
 		$this->logger = $this->getMockBuilder( LoggerInterface::class )
 			->disableOriginalConstructor()
 			->getMock();
+
+		$this->eventDispatcher = $this->getMockBuilder( EventDispatcher::class )
+			->disableOriginalConstructor()
+			->getMock();
 	}
 
 	protected function tearDown(): void {
@@ -56,10 +62,21 @@ class DependencyValidatorTest extends TestCase {
 		parent::tearDown();
 	}
 
+	private function newInstance( string $eTag = '', int $cacheTTL = 3600, ?EventDispatcher $eventDispatcher = null ): DependencyValidator {
+		return new DependencyValidator(
+			$this->namespaceExaminer,
+			$this->dependencyLinksValidator,
+			$this->entityCache,
+			$eTag,
+			$cacheTTL,
+			$eventDispatcher ?? $this->eventDispatcher
+		);
+	}
+
 	public function testCanConstruct() {
 		$this->assertInstanceOf(
 			DependencyValidator::class,
-			new DependencyValidator( $this->namespaceExaminer, $this->dependencyLinksValidator, $this->entityCache )
+			$this->newInstance()
 		);
 	}
 
@@ -72,7 +89,10 @@ class DependencyValidatorTest extends TestCase {
 			->method( 'overrideSub' )
 			->with(
 				$this->stringContains( 'smw:entity:2623cc3534dff8ce37b7b27e1b009a96' ),
-				$this->stringContains( 'foo-etag' ) );
+				'_smw_dirty_',
+				'1',
+				$this->anything()
+			);
 
 		$eventDispatcher = $this->getMockBuilder( EventDispatcher::class )
 			->disableOriginalConstructor()
@@ -83,6 +103,8 @@ class DependencyValidatorTest extends TestCase {
 			->with( 'InvalidateResultCache' );
 
 		$subject = WikiPage::newFromText( 'Foo' );
+
+		$instance = $this->newInstance( 'foo-etag', 3600, $eventDispatcher );
 
 		$this->dependencyLinksValidator->expects( $this->once() )
 			->method( 'canCheckDependencies' )
@@ -96,18 +118,6 @@ class DependencyValidatorTest extends TestCase {
 		$this->dependencyLinksValidator->expects( $this->once() )
 			->method( 'getCheckedDependencies' )
 			->willReturn( [] );
-
-		$instance = new DependencyValidator(
-			$this->namespaceExaminer,
-			$this->dependencyLinksValidator,
-			$this->entityCache
-		);
-
-		$instance->setETag( 'foo-etag' );
-
-		$instance->setEventDispatcher(
-			$eventDispatcher
-		);
 
 		$this->assertTrue(
 			$instance->hasArchaicDependencies( $subject )
@@ -133,13 +143,7 @@ class DependencyValidatorTest extends TestCase {
 			->with( $subject )
 			->willReturn( false );
 
-		$instance = new DependencyValidator(
-			$this->namespaceExaminer,
-			$this->dependencyLinksValidator,
-			$this->entityCache
-		);
-
-		$instance->setETag( 'foo-etag' );
+		$instance = $this->newInstance( 'foo-etag' );
 
 		$this->assertFalse(
 			$instance->hasArchaicDependencies( $subject )
@@ -156,13 +160,7 @@ class DependencyValidatorTest extends TestCase {
 
 		$subject = WikiPage::newFromText( 'Foo' );
 
-		$instance = new DependencyValidator(
-			$this->namespaceExaminer,
-			$this->dependencyLinksValidator,
-			$this->entityCache
-		);
-
-		$instance->setETag( 'foo-etag' );
+		$instance = $this->newInstance( 'foo-etag' );
 
 		$this->assertFalse(
 			$instance->hasArchaicDependencies( $subject )
@@ -173,11 +171,7 @@ class DependencyValidatorTest extends TestCase {
 		$subject = WikiPage::newFromText( 'Foo' );
 		$title = $subject->getTitle();
 
-		$instance = new DependencyValidator(
-			$this->namespaceExaminer,
-			$this->dependencyLinksValidator,
-			$this->entityCache
-		);
+		$instance = $this->newInstance();
 
 		$instance->markTitle( $title );
 
@@ -196,11 +190,7 @@ class DependencyValidatorTest extends TestCase {
 
 		$subject = WikiPage::newFromText( 'Foo' );
 
-		$instance = new DependencyValidator(
-			$this->namespaceExaminer,
-			$this->dependencyLinksValidator,
-			$this->entityCache
-		);
+		$instance = $this->newInstance();
 
 		$this->assertTrue(
 			$instance->canKeepParserCache( $subject )
@@ -219,13 +209,7 @@ class DependencyValidatorTest extends TestCase {
 
 		$subject = WikiPage::newFromText( 'Foo' );
 
-		$instance = new DependencyValidator(
-			$this->namespaceExaminer,
-			$this->dependencyLinksValidator,
-			$this->entityCache
-		);
-
-		$instance->setETag( 'foo-etag' );
+		$instance = $this->newInstance( 'foo-etag' );
 
 		$this->assertTrue(
 			$instance->canKeepParserCache( $subject )
@@ -249,15 +233,64 @@ class DependencyValidatorTest extends TestCase {
 
 		$subject = WikiPage::newFromText( 'Foo' );
 
+		$instance = $this->newInstance( 'foo-etag' );
+
+		$this->assertFalse(
+			$instance->canKeepParserCache( $subject )
+		);
+	}
+
+	public function testHasArchaicDependenciesWriteCausesCanKeepParserCacheRejection() {
+		// Integration-style: hasArchaicDependencies' overrideSub write must
+		// cause canKeepParserCache to reject for the same request's eTag,
+		// because the marker is written under DIRTY_MARKER, not the eTag.
+		$this->namespaceExaminer->expects( $this->any() )
+			->method( 'isSemanticEnabled' )
+			->willReturn( true );
+
+		$this->dependencyLinksValidator->expects( $this->once() )
+			->method( 'canCheckDependencies' )
+			->willReturn( true );
+
+		$this->dependencyLinksValidator->expects( $this->once() )
+			->method( 'hasArchaicDependencies' )
+			->willReturn( true );
+
+		$this->dependencyLinksValidator->expects( $this->once() )
+			->method( 'getCheckedDependencies' )
+			->willReturn( [] );
+
+		$eventDispatcher = $this->getMockBuilder( EventDispatcher::class )
+			->disableOriginalConstructor()
+			->getMock();
+
+		$realEntityCache = new EntityCache( new FixedInMemoryLruCache() );
+
 		$instance = new DependencyValidator(
 			$this->namespaceExaminer,
 			$this->dependencyLinksValidator,
-			$this->entityCache
+			$realEntityCache,
+			'foo-etag',
+			3600,
+			$eventDispatcher
 		);
 
-		$instance->setETag( 'foo-etag' );
+		$subject = WikiPage::newFromText( 'Foo' );
 
+		// hasArchaicDependencies writes the dirty marker (not the eTag).
+		$this->assertTrue(
+			$instance->hasArchaicDependencies( $subject )
+		);
+
+		// canKeepParserCache for the same request's eTag must reject:
+		// the parent key now exists but the eTag sub-key does not.
 		$this->assertFalse(
+			$instance->canKeepParserCache( $subject )
+		);
+
+		// A second call with the same eTag finds the saveSub entry from
+		// the prior rejection and keeps the cache (single-rejection-per-eTag).
+		$this->assertTrue(
 			$instance->canKeepParserCache( $subject )
 		);
 	}

@@ -2,12 +2,14 @@
 
 namespace SMW\Tests\Unit\MediaWiki\Api;
 
+use MediaWiki\Title\TitleFactory;
 use Onoi\Cache\Cache;
 use PHPUnit\Framework\TestCase;
 use SMW\DataItems\WikiPage;
 use SMW\DataModel\SemanticData;
 use SMW\MediaWiki\Api\Browse;
 use SMW\MediaWiki\Connection\Database;
+use SMW\Settings;
 use SMW\SQLStore\EntityStore\DataItemHandler;
 use SMW\SQLStore\Lookup\ProximityPropertyValueLookup;
 use SMW\SQLStore\SQLStore;
@@ -31,6 +33,7 @@ class BrowseTest extends TestCase {
 	private $store;
 	private $apiFactory;
 	private $testEnvironment;
+	private $titleFactory;
 
 	protected function setUp(): void {
 		parent::setUp();
@@ -55,6 +58,10 @@ class BrowseTest extends TestCase {
 			->method( 'service' )
 			->with( 'ProximityPropertyValueLookup' )
 			->willReturn( $proximityPropertyValueLookup );
+
+		$this->titleFactory = $this->getMockBuilder( TitleFactory::class )
+			->disableOriginalConstructor()
+			->getMock();
 	}
 
 	protected function tearDown(): void {
@@ -63,9 +70,21 @@ class BrowseTest extends TestCase {
 	}
 
 	public function testCanConstruct() {
+		$settings = $this->getMockBuilder( Settings::class )
+			->disableOriginalConstructor()
+			->getMock();
+
+		$cache = $this->getMockBuilder( Cache::class )
+			->disableOriginalConstructor()
+			->getMock();
+
 		$instance = new Browse(
 			$this->apiFactory->newApiMain( [] ),
-			'smwbrowse'
+			'smwbrowse',
+			$this->store,
+			$settings,
+			$cache,
+			$this->titleFactory
 		);
 
 		$this->assertInstanceOf(
@@ -138,9 +157,6 @@ class BrowseTest extends TestCase {
 			->method( 'getConnection' )
 			->willReturn( $connection );
 
-		$this->testEnvironment->registerObject( 'Cache', $cache );
-		$this->testEnvironment->registerObject( 'Store', $this->store );
-
 		$instance = new Browse(
 			$this->apiFactory->newApiMain(
 				[
@@ -149,7 +165,11 @@ class BrowseTest extends TestCase {
 					'params'   => json_encode( [ 'search' => 'Foo' ] + $parameters )
 				]
 			),
-			'smwbrowse'
+			'smwbrowse',
+			$this->store,
+			Settings::newFromArray( [ 'smwgCacheUsage' => [ 'api.browse' => true ] ] ),
+			$cache,
+			$this->titleFactory
 		);
 
 		$instance->execute();
@@ -180,6 +200,17 @@ class BrowseTest extends TestCase {
 			->method( 'getSemanticData' )
 			->willReturn( $semanticData );
 
+		$settings = $this->getMockBuilder( Settings::class )
+			->disableOriginalConstructor()
+			->getMock();
+
+		$cache = $this->getMockBuilder( Cache::class )
+			->disableOriginalConstructor()
+			->getMock();
+
+		// SubjectLookup::doSerialize still resolves the Store through
+		// ApplicationFactory directly; register the mock so the inner
+		// getSemanticData() call hits the same store as the injected one.
 		$this->testEnvironment->registerObject( 'Store', $this->store );
 
 		$instance = new Browse(
@@ -190,7 +221,11 @@ class BrowseTest extends TestCase {
 					'params'   => json_encode( [ 'subject' => 'Bar', 'ns' => 0 ] )
 				]
 			),
-			'smwbrowse'
+			'smwbrowse',
+			$this->store,
+			$settings,
+			$cache,
+			$this->titleFactory
 		);
 
 		$instance->execute();

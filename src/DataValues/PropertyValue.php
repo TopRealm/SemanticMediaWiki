@@ -180,7 +180,7 @@ class PropertyValue extends DataValue {
 		}
 
 		// @see the SMW_DV_PROV_DTITLE explanation
-		if ( $this->isEnabledFeature( SMW_DV_PROV_DTITLE ) ) {
+		if ( $this->hasFeature( SMW_DV_PROV_DTITLE ) ) {
 			$dataItem = $this->dataValueServiceFactory->getPropertySpecificationLookup()->getPropertyFromDisplayTitle(
 				$value
 			);
@@ -191,8 +191,8 @@ class PropertyValue extends DataValue {
 		// Copy the original DI to ensure we can compare it against a possible redirect
 		$this->inceptiveProperty = $this->m_dataitem;
 
-		if ( $this->isEnabledFeature( SMW_DV_PROV_REDI ) ) {
-			$this->m_dataitem = $this->m_dataitem->getRedirectTarget();
+		if ( $this->hasFeature( SMW_DV_PROV_REDI ) && !$this->m_dataitem->isInverse() ) {
+			$this->m_dataitem = $this->dataValueServiceFactory->getStore()->getRedirectTarget( $this->m_dataitem );
 		}
 
 		// If no external caption has been invoked then fetch a preferred label
@@ -456,7 +456,7 @@ class PropertyValue extends DataValue {
 
 	/**
 	 * Convenience method to find the type id of this property. Most callers
-	 * should rather use Property::findPropertyTypeId() directly. Note
+	 * should rather use Property::findPropertyValueType() directly. Note
 	 * that this is not the same as getTypeID(), which returns the id of
 	 * this property datavalue.
 	 *
@@ -467,7 +467,7 @@ class PropertyValue extends DataValue {
 			return '__err';
 		}
 
-		return $this->m_dataitem->findPropertyTypeId();
+		return $this->m_dataitem->findPropertyValueType();
 	}
 
 	private function createDataItemFrom( bool $reqCapitalizedFirstChar, $propertyName, $capitalizedName, bool $inverse ): Property {

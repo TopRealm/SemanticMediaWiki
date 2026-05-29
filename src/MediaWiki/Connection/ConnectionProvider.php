@@ -2,11 +2,12 @@
 
 namespace SMW\MediaWiki\Connection;
 
+use MediaWiki\MediaWikiServices;
 use Psr\Log\LoggerAwareTrait;
 use RuntimeException;
 use SMW\Connection\ConnectionProvider as IConnectionProvider;
 use SMW\Connection\ConnRef;
-use SMW\Services\ServicesFactory;
+use Wikimedia\Rdbms\IDatabase;
 
 /**
  * @license GPL-2.0-or-later
@@ -89,10 +90,7 @@ class ConnectionProvider implements IConnectionProvider {
 		);
 
 		$this->logger->info(
-			[
-				'Connection',
-				'{provider}: {conf}',
-			],
+			'Connection {provider}: {conf}',
 			[
 				'role' => 'developer',
 				'provider' => $this->provider,
@@ -123,13 +121,31 @@ class ConnectionProvider implements IConnectionProvider {
 		);
 	}
 
-	private function newLoadBalancerConnectionProvider( $id ): LoadBalancerConnectionProvider {
-		return new LoadBalancerConnectionProvider( $id );
+	private function newLoadBalancerConnectionProvider( $id ): IConnectionProvider {
+		return new class( $id ) implements IConnectionProvider {
+			private ?IDatabase $connection = null;
+
+			public function __construct( private $id ) {
+			}
+
+			public function getConnection(): IDatabase {
+				if ( $this->connection === null ) {
+					$loadBalancer = MediaWikiServices::getInstance()->getDBLoadBalancer();
+					$this->connection = $loadBalancer->getConnection( $this->id );
+				}
+
+				return $this->connection;
+			}
+
+			public function releaseConnection(): void {
+				$this->connection = null;
+			}
+		};
 	}
 
 	private function newTransactionHandler(): TransactionHandler {
 		return new TransactionHandler(
-			ServicesFactory::getInstance()->create( 'DBLoadBalancerFactory' )
+			MediaWikiServices::getInstance()->getDBLoadBalancerFactory()
 		);
 	}
 

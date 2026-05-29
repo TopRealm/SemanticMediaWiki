@@ -40,7 +40,7 @@ class UserdefinedPropertyExaminer extends DeclarationExaminer {
 			return;
 		}
 
-		$type = $property->findPropertyTypeID();
+		$type = $property->findPropertyValueType();
 
 		$this->checkMessages( $property );
 
@@ -68,7 +68,7 @@ class UserdefinedPropertyExaminer extends DeclarationExaminer {
 			return;
 		}
 
-		$type = $property->findPropertyTypeID();
+		$type = $property->findPropertyValueType();
 
 		if ( $type === MonolingualTextValue::TYPE_ID ) {
 			return;
@@ -195,14 +195,14 @@ class UserdefinedPropertyExaminer extends DeclarationExaminer {
 			new Property( '_SUBP' )
 		);
 
-		if ( $pv === null || $pv === [] ) {
+		if ( $pv === [] ) {
 			return;
 		}
 
 		$key = end( $pv )->getDBKey();
 		$parentProperty = new Property( $key );
 
-		if ( $type === $parentProperty->findPropertyTypeID() ) {
+		if ( $type === $parentProperty->findPropertyValueType() ) {
 			return;
 		}
 

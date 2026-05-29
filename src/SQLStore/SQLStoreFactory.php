@@ -2,6 +2,7 @@
 
 namespace SMW\SQLStore;
 
+use MediaWiki\Logger\LoggerFactory;
 use MediaWiki\MediaWikiServices;
 use Onoi\MessageReporter\MessageReporter;
 use Onoi\MessageReporter\NullMessageReporter;
@@ -74,6 +75,8 @@ use SMW\SQLStore\TableBuilder\TableSchemaManager;
  */
 class SQLStoreFactory {
 
+	private MessageReporter $messageReporter;
+
 	private QueryEngineFactory $queryEngineFactory;
 
 	/**
@@ -81,11 +84,9 @@ class SQLStoreFactory {
 	 */
 	public function __construct(
 		private readonly SQLStore $store,
-		private ?MessageReporter $messageReporter = null,
+		?MessageReporter $messageReporter = null,
 	) {
-		if ( $this->messageReporter === null ) {
-			$this->messageReporter = new NullMessageReporter();
-		}
+		$this->messageReporter = $messageReporter ?? new NullMessageReporter();
 
 		$this->queryEngineFactory = new QueryEngineFactory( $this->store );
 	}
@@ -127,7 +128,8 @@ class SQLStoreFactory {
 
 		$entityIdManager = new EntityIdManager(
 			$this->store,
-			$this
+			$this,
+			$settings
 		);
 
 		$entityIdManager->setEqualitySupport(
@@ -214,7 +216,7 @@ class SQLStoreFactory {
 		$propertyUsageListLookup = new PropertyUsageListLookup(
 			$this->store,
 			$this->newPropertyStatisticsStore(),
-			$requestOptions
+			$requestOptions ?? new RequestOptions()
 		);
 
 		return $this->newCachedListLookup(
@@ -237,7 +239,7 @@ class SQLStoreFactory {
 		$unusedPropertyListLookup = new UnusedPropertyListLookup(
 			$this->store,
 			$this->newPropertyStatisticsStore(),
-			$requestOptions
+			$requestOptions ?? new RequestOptions()
 		);
 
 		return $this->newCachedListLookup(
@@ -344,11 +346,14 @@ class SQLStoreFactory {
 			$applicationFactory->singleton( 'RevisionGuard' )
 		);
 
+		$mwServices = MediaWikiServices::getInstance();
 		$rebuilder = new Rebuilder(
 			$this->store,
-			$applicationFactory->newTitleFactory(),
+			$mwServices->getTitleFactory(),
 			$entityValidator,
-			$this->newPropertyTableIdReferenceDisposer()
+			$this->newPropertyTableIdReferenceDisposer(),
+			$applicationFactory->newJobFactory(),
+			$mwServices->getHookContainer()
 		);
 
 		return $rebuilder;
@@ -476,16 +481,20 @@ class SQLStoreFactory {
 			$setupFile
 		);
 
+		$mwServices = MediaWikiServices::getInstance();
+
 		$installer = new Installer(
 			$tableSchemaManager,
 			$tableBuilder,
 			$tableBuildExaminer,
 			$versionExaminer,
-			$tableOptimizer
+			$tableOptimizer,
+			$mwServices->getTitleFactory(),
+			$mwServices->getJobFactory()
 		);
 
-		$installer->setHookDispatcher(
-			$applicationFactory->getHookDispatcher()
+		$installer->setHookContainer(
+			$mwServices->getHookContainer()
 		);
 
 		$installer->setSetupFile(
@@ -524,7 +533,7 @@ class SQLStoreFactory {
 	 * @return LoggerInterface
 	 */
 	public function getLogger(): LoggerInterface {
-		return ApplicationFactory::getInstance()->getMediaWikiLogger();
+		return LoggerFactory::getInstance( 'smw' );
 	}
 
 	/**
@@ -851,9 +860,12 @@ class SQLStoreFactory {
 	 */
 	public function newRedirectStore(): RedirectStore {
 		$settings = ApplicationFactory::getInstance()->getSettings();
+		$mwServices = MediaWikiServices::getInstance();
 
 		$redirectStore = new RedirectStore(
-			$this->store
+			$this->store,
+			$mwServices->getTitleFactory(),
+			$mwServices->getJobFactory()
 		);
 
 		$redirectStore->setCommandLineMode(
@@ -891,8 +903,8 @@ class SQLStoreFactory {
 			$this->getLogger()
 		);
 
-		$propertyChangeListener->setHookDispatcher(
-			$applicationFactory->getHookDispatcher()
+		$propertyChangeListener->setHookContainer(
+			MediaWikiServices::getInstance()->getHookContainer()
 		);
 
 		$propertyChangeListener->loadListeners();
@@ -987,10 +999,7 @@ class SQLStoreFactory {
 		$settings = $applicationFactory->getSettings();
 
 		$propertyTableIdReferenceDisposer = new PropertyTableIdReferenceDisposer(
-			$this->store
-		);
-
-		$propertyTableIdReferenceDisposer->setEventDispatcher(
+			$this->store,
 			$applicationFactory->getEventDispatcher()
 		);
 

@@ -7,6 +7,7 @@ use MediaWiki\Message\Message;
 use MediaWiki\Output\OutputPage;
 use MediaWiki\SpecialPage\SpecialPage;
 use PHPUnit\Framework\TestCase;
+use Skin;
 use SMW\Encoder;
 use SMW\MediaWiki\Hooks\SidebarBeforeOutput;
 use SMW\Services\ServicesFactory as ApplicationFactory;
@@ -39,16 +40,11 @@ class EncodingIntegrationTest extends TestCase {
 		}
 
 		$instance = new SidebarBeforeOutput(
-			ApplicationFactory::getInstance()->getNamespaceExaminer()
+			ApplicationFactory::getInstance()->getNamespaceExaminer(),
+			ApplicationFactory::getInstance()->getSettings()
 		);
 
-		$instance->setOptions(
-			[
-				'smwgBrowseFeatures' => $setup['settings']['smwgBrowseFeatures']
-			]
-		);
-
-		$instance->process( $setup['skin'], $sidebar );
+		$instance->onSidebarBeforeOutput( $setup['skin'], $sidebar );
 
 		$this->assertStringContainsString(
 			$expected,
@@ -76,7 +72,7 @@ class EncodingIntegrationTest extends TestCase {
 	private function newSidebarBeforeOutputSetup( $text ) {
 		$settings = [
 			'smwgNamespacesWithSemanticLinks' => [ NS_MAIN => true ],
-			'smwgBrowseFeatures'           => SMW_BROWSE_TLINK
+			'smwgBrowseFeatures'           => [ 'toolbox-link' ]
 		];
 
 		$message = $this->getMockBuilder( Message::class )
@@ -91,7 +87,7 @@ class EncodingIntegrationTest extends TestCase {
 			->method( 'isArticle' )
 			->willReturn( true );
 
-		$skin = $this->getMockBuilder( '\Skin' )
+		$skin = $this->getMockBuilder( Skin::class )
 			->disableOriginalConstructor()
 			->getMock();
 

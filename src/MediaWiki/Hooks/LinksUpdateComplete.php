@@ -2,15 +2,16 @@
 
 namespace SMW\MediaWiki\Hooks;
 
-use MediaWiki\Deferred\LinksUpdate\LinksUpdate;
+use MediaWiki\Hook\LinksUpdateCompleteHook;
 use MediaWiki\Parser\ParserOutputLinkTypes;
 use MediaWiki\Title\Title;
-use Psr\Log\LoggerAwareTrait;
+use Psr\Log\LoggerInterface;
 use SMW\DataModel\SemanticData;
-use SMW\MediaWiki\HookListener;
-use SMW\MediaWiki\RevisionGuardAwareTrait;
+use SMW\MediaWiki\Jobs\ContentParserFactory;
+use SMW\MediaWiki\RevisionGuard;
 use SMW\NamespaceExaminer;
-use SMW\Services\ServicesFactory as ApplicationFactory;
+use SMW\ParserData;
+use SMW\SiteReadiness;
 
 /**
  * LinksUpdateComplete hook is called at the end of LinksUpdate()
@@ -22,26 +23,20 @@ use SMW\Services\ServicesFactory as ApplicationFactory;
  *
  * @author mwjames
  */
-class LinksUpdateComplete implements HookListener {
-
-	use RevisionGuardAwareTrait;
-	use LoggerAwareTrait;
+class LinksUpdateComplete implements LinksUpdateCompleteHook {
 
 	private bool $enabledDeferredUpdate = true;
 
-	private bool $isReady = true;
-
 	/**
-	 * @since 3.0
+	 * @since 7.0.0
 	 */
-	public function __construct( private NamespaceExaminer $namespaceExaminer ) {
-	}
-
-	/**
-	 * @since 3.0
-	 */
-	public function isReady( bool $isReady ): void {
-		$this->isReady = $isReady;
+	public function __construct(
+		private readonly NamespaceExaminer $namespaceExaminer,
+		private readonly ContentParserFactory $contentParserFactory,
+		private readonly RevisionGuard $revisionGuard,
+		private readonly SiteReadiness $siteReadiness,
+		private readonly LoggerInterface $logger,
+	) {
 	}
 
 	/**
@@ -52,10 +47,10 @@ class LinksUpdateComplete implements HookListener {
 	}
 
 	/**
-	 * @since 1.9
+	 * @since 7.0.0
 	 */
-	public function process( LinksUpdate $linksUpdate ): bool {
-		if ( !$this->isReady ) {
+	public function onLinksUpdateComplete( $linksUpdate, $ticket ) {
+		if ( !$this->siteReadiness->isReady() ) {
 			return $this->doAbort();
 		}
 
@@ -65,10 +60,8 @@ class LinksUpdateComplete implements HookListener {
 			return true;
 		}
 
-		$parserData = ApplicationFactory::getInstance()->newParserData(
-			$title,
-			$linksUpdate->getParserOutput()
-		);
+		$parserData = new ParserData( $title, $linksUpdate->getParserOutput() );
+		$parserData->setLogger( $this->logger );
 
 		if ( $this->namespaceExaminer->isSemanticEnabled( $title->getNamespace() ) ) {
 			// #347 showed that an external process (e.g. RefreshLinksJob) can inject a
@@ -111,13 +104,10 @@ class LinksUpdateComplete implements HookListener {
 	 * @note Parsing is expensive but it is more expensive to loose data or to
 	 * expect that an external process adheres the object contract
 	 */
-	private function updateSemanticData( &$parserData, Title $title, string $reason = '' ): void {
+	private function updateSemanticData( ParserData $parserData, Title $title, string $reason = '' ): void {
 		$this->logger->info(
-			[
-				'LinksUpdateConstructed',
-				"Required content re-parse due to $reason",
-				$title->getPrefixedDBKey()
-			]
+			'LinksUpdateConstructed Required content re-parse due to '
+				. $reason . ' ' . $title->getPrefixedDBKey(),
 		);
 
 		$semanticData = $this->reparseAndFetchSemanticData( $title );
@@ -128,7 +118,7 @@ class LinksUpdateComplete implements HookListener {
 	}
 
 	private function reparseAndFetchSemanticData( Title $title ) {
-		$contentParser = ApplicationFactory::getInstance()->newContentParser( $title );
+		$contentParser = $this->contentParserFactory->newContentParser( $title );
 		$parserOutput = $contentParser->parse()->getOutput();
 
 		if ( $parserOutput === null ) {

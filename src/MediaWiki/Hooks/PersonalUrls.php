@@ -2,13 +2,13 @@
 
 namespace SMW\MediaWiki\Hooks;
 
+use MediaWiki\User\Options\UserOptionsLookup;
 use SkinTemplate;
 use SMW\GroupPermissions;
-use SMW\MediaWiki\HookListener;
 use SMW\MediaWiki\JobQueue;
 use SMW\MediaWiki\Permission\PermissionExaminer;
-use SMW\MediaWiki\Preference\PreferenceExaminer;
-use SMW\OptionsAwareTrait;
+use SMW\MediaWiki\PermissionManager;
+use SMW\Settings;
 
 /**
  * @see https://www.mediawiki.org/wiki/Manual:Hooks/PersonalUrls
@@ -18,42 +18,38 @@ use SMW\OptionsAwareTrait;
  *
  * @author mwjames
  */
-class PersonalUrls implements HookListener {
-
-	use OptionsAwareTrait;
+class PersonalUrls {
 
 	/**
-	 * @since 3.0
+	 * @since 7.0.0
 	 */
 	public function __construct(
-		private SkinTemplate $skin,
-		private JobQueue $jobQueue,
-		private PermissionExaminer $permissionExaminer,
-		private PreferenceExaminer $preferenceExaminer,
+		private readonly JobQueue $jobQueue,
+		private readonly UserOptionsLookup $userOptionsLookup,
+		private readonly Settings $settings,
+		private readonly PermissionManager $permissionManager,
 	) {
 	}
 
 	/**
-	 * @since 3.0
-	 *
-	 * @param array &$personalUrls
-	 *
-	 * @return true
+	 * @since 7.0.0
 	 */
-	public function process( array &$personalUrls ): bool {
-		$watchlist = $this->getOption( 'smwgJobQueueWatchlist', [] );
+	public function onPersonalUrls( array &$personal_urls, $title, SkinTemplate $skinTemplate ): bool {
+		$user = $skinTemplate->getUser();
+		$permissionExaminer = new PermissionExaminer( $this->permissionManager, $user );
+		$watchlist = $this->settings->get( 'smwgJobQueueWatchlist' ) ?: [];
 
 		if (
-			$this->preferenceExaminer->hasPreferenceOf( GetPreferences::VIEW_JOBQUEUE_WATCHLIST ) &&
-			$this->permissionExaminer->hasPermissionOf( GroupPermissions::VIEW_JOBQUEUE_WATCHLIST ) &&
+			$this->userOptionsLookup->getOption( $user, GetPreferences::VIEW_JOBQUEUE_WATCHLIST, false ) &&
+			$permissionExaminer->hasPermissionOf( GroupPermissions::VIEW_JOBQUEUE_WATCHLIST ) &&
 			$watchlist !== [] ) {
-			$personalUrls = $this->getJobQueueWatchlist( $watchlist, $personalUrls );
+			$personal_urls = $this->getJobQueueWatchlist( $skinTemplate, $watchlist, $personal_urls );
 		}
 
 		return true;
 	}
 
-	private function getJobQueueWatchlist( $watchlist, array $personalUrls ): array {
+	private function getJobQueueWatchlist( SkinTemplate $skin, $watchlist, array $personalUrls ): array {
 		$queue = [];
 
 		foreach ( $watchlist as $job ) {
@@ -70,13 +66,14 @@ class PersonalUrls implements HookListener {
 			$queue[$job] = $this->humanReadable( $size );
 		}
 
-		$out = $this->skin->getOutput();
+		$out = $skin->getOutput();
 		$personalUrl = [];
 
 		$out->addModules( 'ext.smw.personal' );
 		$out->addJsConfigVars( 'smwgJobQueueWatchlist', $queue );
 
 		$personalUrl['smw-jobqueue-watchlist'] = [
+			// @phan-suppress-next-line PhanImpossibleTypeComparison
 			'text'   => 'ⅉ [ ' . ( $queue === [] ? '0' : implode( ' | ', $queue ) ) . ' ]',
 			'href'   => '#',
 			'class'  => 'smw-personal-jobqueue-watchlist is-disabled',

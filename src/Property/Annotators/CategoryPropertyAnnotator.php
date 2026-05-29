@@ -6,10 +6,11 @@ use SMW\DataItems\Property;
 use SMW\DataItems\WikiPage;
 use SMW\DataModel\SemanticData;
 use SMW\DataValueFactory;
+use SMW\MediaWiki\PageCreator;
 use SMW\Parser\AnnotationProcessor;
 use SMW\ProcessingErrorMsgHandler;
 use SMW\Property\Annotator;
-use SMW\Services\ServicesFactory as ApplicationFactory;
+use SMW\Store;
 
 /**
  * Handling category annotation
@@ -44,6 +45,8 @@ class CategoryPropertyAnnotator extends PropertyAnnotatorDecorator {
 	public function __construct(
 		Annotator $propertyAnnotator,
 		private readonly array $categories,
+		private readonly Store $store,
+		private readonly PageCreator $pageCreator,
 	) {
 		parent::__construct( $propertyAnnotator );
 	}
@@ -141,8 +144,14 @@ class CategoryPropertyAnnotator extends PropertyAnnotatorDecorator {
 			// by the constraint error lookup
 			$dataValue->checkConstraints();
 
+			$property = $dataValue->getProperty();
+
+			if ( $property === null ) {
+				return;
+			}
+
 			$semanticData->addPropertyObjectValue(
-				$dataValue->getProperty(),
+				$property,
 				$cat
 			);
 
@@ -165,9 +174,14 @@ class CategoryPropertyAnnotator extends PropertyAnnotatorDecorator {
 
 	private function isHiddenCategory( $catName ): bool {
 		if ( $this->hiddenCategories === null ) {
+			$title = $this->getSemanticData()->getSubject()->getTitle();
 
-			$wikipage = ApplicationFactory::getInstance()->newPageCreator()->createPage(
-				$this->getSemanticData()->getSubject()->getTitle()
+			if ( $title === null ) {
+				return false;
+			}
+
+			$wikipage = $this->pageCreator->createPage(
+				$title
 			);
 
 			$this->hiddenCategories = $wikipage->getHiddenCategories();
@@ -186,7 +200,7 @@ class CategoryPropertyAnnotator extends PropertyAnnotatorDecorator {
 
 	private function getRedirectTarget( WikiPage $subject ) {
 		if ( $this->useCategoryRedirect ) {
-			return ApplicationFactory::getInstance()->getStore()->getRedirectTarget( $subject );
+			return $this->store->getRedirectTarget( $subject );
 		}
 
 		return $subject;

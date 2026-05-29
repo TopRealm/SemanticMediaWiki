@@ -85,6 +85,15 @@ class DefaultParamDefinition {
 			'upperbound' => $vars['smwgQUpperbound'],
 		];
 
+		// Opaque keyset cursor token (base64url-encoded JSON produced by
+		// `CursorEncoder`). When present, the query engine switches to
+		// keyset pagination and ignores `offset`. The constrained spike
+		// supports only default-sort queries; `sort=` + `cursor=`
+		// combinations are rejected during query construction.
+		$params['cursor'] = [
+			'default' => '',
+		];
+
 		$params['link'] = [
 			'default' => 'all',
 			'values' => [ 'all', 'subject', 'none' ],
@@ -99,7 +108,7 @@ class DefaultParamDefinition {
 		$params['order'] = [
 			'islist' => true,
 			'default' => [],
-			'values' => [ 'descending', 'desc', 'asc', 'ascending', 'rand', 'random' ],
+			'values' => [ 'descending', 'desc', 'asc', 'ascending', 'rand', 'random', 'none' ],
 		];
 
 		$params['headers'] = [
@@ -152,10 +161,11 @@ class DefaultParamDefinition {
 	}
 
 	private static function getSourceParam( array $vars ): array {
-		$sourceValues = is_array( $vars['smwgQuerySources'] ) ? array_keys( $vars['smwgQuerySources'] ) : [];
+		$sourceValues = is_array( $vars['smwgQuerySources'] ) ?
+			array_keys( $vars['smwgQuerySources'] ) : [];
 
 		return [
-			'default' => array_key_exists( 'default', $sourceValues ) ? 'default' : '',
+			'default' => in_array( 'default', $sourceValues, true ) ? 'default' : '',
 			'values' => $sourceValues,
 		];
 	}

@@ -110,7 +110,9 @@ class ProximityPropertyValueLookup {
 			// transformed it!
 			if ( $diType === DataItem::TYPE_TIME ) {
 				$value = DataValueFactory::getInstance()->newDataValueByItem(
-					Time::doUnserialize( $value ), $property )->getWikiValue();
+					Time::doUnserialize( $value ),
+					$property
+				)->getWikiValue();
 			}
 
 			$list[] = $value;
@@ -122,7 +124,15 @@ class ProximityPropertyValueLookup {
 	/**
 	 * @return mixed[][]|string[]
 	 */
-	private function fetchFromIDTable( SelectQueryBuilder $qb, int $pid, ?string $table, int $limit, int $offset, string $search, string|false $sort ): array {
+	private function fetchFromIDTable(
+		SelectQueryBuilder $qb,
+		int $pid,
+		?string $table,
+		int $limit,
+		int $offset,
+		string $search,
+		string|false $sort
+	): array {
 		$connection = $this->store->getConnection( 'mw.db' );
 		$res = [];
 
@@ -157,7 +167,7 @@ class ProximityPropertyValueLookup {
 
 			$sub = $qb->newSubquery()
 				->select( 'o_id' )
-				->from( $table )
+				->from( $table ?? '' )
 				->where( [ 'p_id' => $pid ] )
 				->groupBy( 'o_id' );
 
@@ -165,7 +175,7 @@ class ProximityPropertyValueLookup {
 
 		} elseif ( $this->isFixedPropertyTable( $table ) === false ) {
 
-			$qb->from( $table )
+			$qb->from( $table ?? '' )
 				->andWhere( [ 'p_id' => $pid ] );
 
 			// To make the MySQL query planner happy to pick the right index!
@@ -182,7 +192,7 @@ class ProximityPropertyValueLookup {
 			 * WHERE ( smw_sortkey LIKE '%foo%' OR smw_sortkey LIKE '%Foo%' OR smw_sortkey LIKE '%FOO%' )
 			 * LIMIT 11
 			 */
-			$qb->from( $table )
+			$qb->from( $table ?? '' )
 				->join( SQLStore::ID_TABLE, null, 'smw_id=o_id' );
 		}
 
@@ -210,7 +220,7 @@ class ProximityPropertyValueLookup {
 	}
 
 	private function getField( Property $property ): array {
-		$typeId = $property->findPropertyTypeID();
+		$typeId = $property->findPropertyValueType();
 		$diType = DataTypeRegistry::getInstance()->getDataItemByType( $typeId );
 
 		$diHandler = $this->store->getDataItemHandlerForDIType(

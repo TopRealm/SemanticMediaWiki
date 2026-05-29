@@ -7,12 +7,13 @@ use MediaWiki\MediaWikiServices;
 use MediaWiki\Revision\RevisionRecord;
 use MediaWiki\Title\Title;
 use MediaWiki\User\User;
-use Onoi\EventDispatcher\EventDispatcherAwareTrait;
 use Psr\Log\LoggerAwareTrait;
 use SMW\DataItems\Property;
 use SMW\DataItems\WikiPage as DIWikiPage;
 use SMW\DataModel\SemanticData;
+use SMW\EventDispatcher\EventDispatcher;
 use SMW\MediaWiki\Deferred\TransactionalCallableUpdate as DeferredUpdate;
+use SMW\MediaWiki\PageCreator;
 use SMW\MediaWiki\RevisionGuardAwareTrait;
 use SMW\Property\ChangePropagationNotifier;
 use SMW\Services\ServicesFactory as ApplicationFactory;
@@ -39,13 +40,16 @@ class DataUpdater {
 
 	use RevisionGuardAwareTrait;
 	use LoggerAwareTrait;
-	use EventDispatcherAwareTrait;
 
 	private Store $store;
 
 	private SemanticData $semanticData;
 
 	private ChangePropagationNotifier $changePropagationNotifier;
+
+	private PageCreator $pageCreator;
+
+	private EventDispatcher $eventDispatcher;
 
 	private ?bool $canCreateUpdateJob = null;
 
@@ -64,7 +68,7 @@ class DataUpdater {
 	private bool $isDeferrableUpdate = false;
 
 	/**
-	 * @var string
+	 * @var string|array
 	 */
 	private $origin = '';
 
@@ -74,11 +78,15 @@ class DataUpdater {
 	public function __construct(
 		Store $store,
 		SemanticData $semanticData,
-		ChangePropagationNotifier $changePropagationNotifier
+		ChangePropagationNotifier $changePropagationNotifier,
+		PageCreator $pageCreator,
+		EventDispatcher $eventDispatcher
 	) {
 		$this->store = $store;
 		$this->semanticData = $semanticData;
 		$this->changePropagationNotifier = $changePropagationNotifier;
+		$this->pageCreator = $pageCreator;
+		$this->eventDispatcher = $eventDispatcher;
 	}
 
 	/**
@@ -114,7 +122,7 @@ class DataUpdater {
 	/**
 	 * @since 2.5
 	 *
-	 * @param string $origin
+	 * @param string|array $origin
 	 */
 	public function setOrigin( $origin ): void {
 		$this->origin = $origin;
@@ -240,9 +248,7 @@ class DataUpdater {
 		$user = null;
 		$title = $this->getSubject()->getTitle();
 
-		$wikiPage = $applicationFactory->newPageCreator()->createPage(
-			$title
-		);
+		$wikiPage = $this->pageCreator->createPage( $title );
 
 		// For example, when using `SemanticApprovedRevs` the guard here ensures
 		// that the revision reference is the same that lead to an update during

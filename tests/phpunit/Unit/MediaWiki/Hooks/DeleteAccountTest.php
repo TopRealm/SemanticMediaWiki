@@ -2,6 +2,8 @@
 
 namespace SMW\Tests\Unit\MediaWiki\Hooks;
 
+use MediaWiki\Title\Title;
+use MediaWiki\Title\TitleFactory;
 use MediaWiki\User\User;
 use PHPUnit\Framework\TestCase;
 use SMW\MediaWiki\Hooks\ArticleDelete;
@@ -21,6 +23,7 @@ class DeleteAccountTest extends TestCase {
 
 	private $namespaceExaminer;
 	private $articleDelete;
+	private $titleFactory;
 
 	protected function setUp(): void {
 		parent::setUp();
@@ -32,12 +35,16 @@ class DeleteAccountTest extends TestCase {
 		$this->articleDelete = $this->getMockBuilder( ArticleDelete::class )
 			->disableOriginalConstructor()
 			->getMock();
+
+		$this->titleFactory = $this->createMock( TitleFactory::class );
+		$this->titleFactory->method( 'newFromText' )
+			->willReturn( $this->createMock( Title::class ) );
 	}
 
 	public function testCanConstruct() {
 		$this->assertInstanceOf(
 			DeleteAccount::class,
-			new DeleteAccount( $this->namespaceExaminer, $this->articleDelete )
+			new DeleteAccount( $this->namespaceExaminer, $this->articleDelete, $this->titleFactory )
 		);
 	}
 
@@ -48,15 +55,16 @@ class DeleteAccountTest extends TestCase {
 			->willReturn( true );
 
 		$this->articleDelete->expects( $this->atLeastOnce() )
-			->method( 'process' );
+			->method( 'scheduleDeleteFor' );
 
 		$instance = new DeleteAccount(
 			$this->namespaceExaminer,
-			$this->articleDelete
+			$this->articleDelete,
+			$this->titleFactory
 		);
 
 		$this->assertTrue(
-			$instance->process( 'Foo' )
+			$instance->onDeleteAccount( 'Foo' )
 		);
 	}
 
@@ -67,7 +75,7 @@ class DeleteAccountTest extends TestCase {
 			->willReturn( true );
 
 		$this->articleDelete->expects( $this->atLeastOnce() )
-			->method( 'process' );
+			->method( 'scheduleDeleteFor' );
 
 		$user = $this->getMockBuilder( User::class )
 			->disableOriginalConstructor()
@@ -79,11 +87,12 @@ class DeleteAccountTest extends TestCase {
 
 		$instance = new DeleteAccount(
 			$this->namespaceExaminer,
-			$this->articleDelete
+			$this->articleDelete,
+			$this->titleFactory
 		);
 
 		$this->assertTrue(
-			$instance->process( $user )
+			$instance->onDeleteAccount( $user )
 		);
 	}
 

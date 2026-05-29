@@ -5,8 +5,9 @@ namespace SMW\Tests\Unit\MediaWiki\Jobs;
 use MediaWiki\Title\Title;
 use PHPUnit\Framework\TestCase;
 use SMW\DataItems\WikiPage;
+use SMW\MediaWiki\JobFactory;
 use SMW\MediaWiki\Jobs\ChangePropagationUpdateJob;
-use SMW\SQLStore\SQLStore;
+use SMW\MediaWiki\Jobs\UpdateJob;
 use SMW\Tests\TestEnvironment;
 
 /**
@@ -21,17 +22,16 @@ use SMW\Tests\TestEnvironment;
 class ChangePropagationUpdateJobTest extends TestCase {
 
 	private $testEnvironment;
+	private $jobFactory;
 
 	protected function setUp(): void {
 		parent::setUp();
 
 		$this->testEnvironment = new TestEnvironment();
 
-		$store = $this->getMockBuilder( SQLStore::class )
+		$this->jobFactory = $this->getMockBuilder( JobFactory::class )
 			->disableOriginalConstructor()
 			->getMock();
-
-		$this->testEnvironment->registerObject( 'Store', $store );
 	}
 
 	protected function tearDown(): void {
@@ -46,7 +46,7 @@ class ChangePropagationUpdateJobTest extends TestCase {
 
 		$this->assertInstanceOf(
 			ChangePropagationUpdateJob::class,
-			new ChangePropagationUpdateJob( $title )
+			new ChangePropagationUpdateJob( $title, [], $this->jobFactory )
 		);
 	}
 
@@ -54,9 +54,21 @@ class ChangePropagationUpdateJobTest extends TestCase {
 	 * @dataProvider jobProvider
 	 */
 	public function testRun( $subject, $parameters ) {
+		$updateJob = $this->getMockBuilder( UpdateJob::class )
+			->disableOriginalConstructor()
+			->getMock();
+
+		$updateJob->expects( $this->once() )
+			->method( 'run' );
+
+		$this->jobFactory->expects( $this->once() )
+			->method( 'newUpdateJob' )
+			->willReturn( $updateJob );
+
 		$instance = new ChangePropagationUpdateJob(
 			$subject->getTitle(),
-			$parameters
+			$parameters,
+			$this->jobFactory
 		);
 
 		$this->assertTrue(

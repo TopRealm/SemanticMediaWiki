@@ -72,7 +72,7 @@ class PSubjectLookup extends Lookup {
 			return [];
 		}
 
-		[ $list, $continueOffset ] = $this->findPropertySubjects(
+		[ $list, $continueOffset, $continueCursor ] = $this->findPropertySubjects(
 			$property,
 			$value,
 			$limit,
@@ -80,7 +80,11 @@ class PSubjectLookup extends Lookup {
 			$parameters
 		);
 
-		// Changing this output format requires to set a new version
+		// Changing this output format requires to set a new version. The
+		// `query-continue-cursor` field is byte-additive: it is only emitted
+		// when the caller opted into cursor mode (by sending `cursor` in
+		// the request payload). Legacy clients that follow
+		// `query-continue-offset` see exactly the pre-cursor response shape.
 		$res = [
 			'query' => $list,
 			'query-continue-offset' => $continueOffset,
@@ -91,6 +95,10 @@ class PSubjectLookup extends Lookup {
 				'count' => count( $list )
 			]
 		];
+
+		if ( self::shouldUseCursorMode( $parameters ) ) {
+			$res['query-continue-cursor'] = $continueCursor;
+		}
 
 		return $res;
 	}
@@ -106,8 +114,10 @@ class PSubjectLookup extends Lookup {
 		}
 
 		$continueOffset = 0;
+		$continueCursor = 0;
 		$count = 0;
 		$requestOptions = $this->newRequestOptions( $parameters );
+		$cursorMode = (bool)$requestOptions->getOption( RequestOptions::CURSOR_MODE );
 
 		$res = $this->store->getPropertySubjects(
 			$property,
@@ -132,12 +142,20 @@ class PSubjectLookup extends Lookup {
 			$count = count( $res );
 		}
 
-		if ( $count > $limit ) {
+		if ( $cursorMode ) {
+			// `PropertySubjectsLookup::postProcessCursorResult()` already
+			// trimmed the lookahead row and wrote the cursor metadata back
+			// onto `$requestOptions`. The trimmed list arrives ready to
+			// display; we just surface the cursor anchor for the next page.
+			if ( $requestOptions->getCursorHasMore() ) {
+				$continueCursor = $requestOptions->getLastCursor() ?? 0;
+			}
+		} elseif ( $count > $limit ) {
 			$continueOffset = $offset + $count;
 			array_pop( $list );
 		}
 
-		return [ $list, $continueOffset ];
+		return [ $list, $continueOffset, $continueCursor ];
 	}
 
 	private function newRequestOptions( array $parameters ): RequestOptions {
@@ -155,8 +173,25 @@ class PSubjectLookup extends Lookup {
 
 		$requestOptions = new RequestOptions();
 		$requestOptions->sort = true;
-		$requestOptions->setLimit( $limit + 1 );
-		$requestOptions->setOffset( $offset );
+
+		if ( self::shouldUseCursorMode( $parameters ) ) {
+			// Cursor mode is authoritative: any `offset` co-sent with
+			// `cursor` is ignored so the response doesn't accidentally seek
+			// past the cursor by the legacy offset amount.
+			// `PropertySubjectsLookup` adds its own `LIMIT + 1` lookahead in
+			// cursor mode, so the caller passes the plain page size.
+			$requestOptions->setLimit( $limit );
+			$requestOptions->setOption( RequestOptions::CURSOR_MODE, true );
+			$cursor = (int)$parameters['cursor'];
+			if ( $cursor > 0 ) {
+				$requestOptions->setCursorAfter( $cursor );
+			}
+		} else {
+			// Legacy offset path: `+1` lookahead is manually trimmed in
+			// `findPropertySubjects()`.
+			$requestOptions->setLimit( $limit + 1 );
+			$requestOptions->setOffset( $offset );
+		}
 
 		if ( isset( $parameters['search'] ) && $parameters['search'] !== '' ) {
 			$search = (string)$parameters['search'];

@@ -196,8 +196,10 @@ class ConceptCacheRebuilder {
 		}
 
 		if ( $skip ) {
-			$line = $this->lines !== false ? "($this->lines) " : '';
-			$this->reportMessage( $line . 'Skipping concept "' . $title->getPrefixedText() . "\": $skip\n", $this->verbose );
+			$this->reportMessage(
+				"($this->lines) " . 'Skipping concept "' . $title->getPrefixedText() . "\": $skip\n",
+				$this->verbose
+			);
 		}
 
 		return $skip;
@@ -248,7 +250,8 @@ class ConceptCacheRebuilder {
 
 	private function getConcepts(): array {
 		if ( $this->concept !== null ) {
-			return [ $this->createConcept() ];
+			$concept = $this->createConcept();
+			return $concept === null ? [] : [ $concept ];
 		}
 
 		return $this->createMultipleConcepts();

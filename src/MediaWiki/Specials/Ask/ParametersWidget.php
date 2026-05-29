@@ -72,7 +72,7 @@ class ParametersWidget {
 			Html::rawElement(
 				'span',
 				[],
-				Message::get( 'smw-ask-parameters', Message::TEXT, Message::USER_LANGUAGE ) . $toggle
+				Message::get( 'smw-ask-parameters', Message::ESCAPED, Message::USER_LANGUAGE ) . $toggle
 			)
 		) . Html::rawElement(
 			'div',
@@ -245,9 +245,7 @@ class ParametersWidget {
 			$class = 'smw-ask-info';
 		}
 
-		if ( $definition->getMessage() !== null ) {
-			$info = Message::get( $definition->getMessage(), Message::TEXT, Message::USER_LANGUAGE );
-		}
+		$info = Message::get( $definition->getMessage(), Message::TEXT, Message::USER_LANGUAGE );
 
 		return HtmlDivTable::cell(
 			Html::rawElement(
@@ -310,10 +308,7 @@ class ParametersWidget {
 
 		// Parameters description text
 		if ( !self::$isTooltipDisplay ) {
-
-			if ( $definition->getMessage() !== null ) {
-				$info = Message::get( $definition->getMessage(), Message::PARSE, Message::USER_LANGUAGE );
-			}
+			$info = Message::get( $definition->getMessage(), Message::PARSE, Message::USER_LANGUAGE );
 
 			$description = Html::rawElement(
 				'span',

@@ -66,16 +66,16 @@ abstract class Store implements QueryEngine {
 	 * @see EntityLookup::getSemanticData
 	 *
 	 * @param WikiPage $subject
-	 * @param string[]|bool $filter
+	 * @param RequestOptions|string[]|bool $filter
 	 */
 	abstract public function getSemanticData( WikiPage $subject, $filter = false );
 
 	/**
 	 * @see EntityLookup::getPropertyValues
 	 *
-	 * @param $subject mixed WikiPage or null
+	 * @param WikiPage|null $subject
 	 * @param Property $property
-	 * @param null $requestoptions RequestOptions
+	 * @param RequestOptions|null $requestoptions
 	 *
 	 * @return array of DataItem
 	 */
@@ -165,7 +165,7 @@ abstract class Store implements QueryEngine {
 			$wikipage = $dataItem;
 		}
 
-		if ( !isset( $wikipage ) ) {
+		if ( !isset( $wikipage ) || !$wikipage instanceof WikiPage ) {
 			return $dataItem;
 		}
 
@@ -194,9 +194,7 @@ abstract class Store implements QueryEngine {
 
 		if ( $type === DataItem::TYPE_PROPERTY ) {
 			$entityCache->save( $key, $dataItem->getSerialization(), $entityCache::TTL_DAY );
-			if ( $wikipage instanceof WikiPage || $wikipage instanceof Title ) {
-				$entityCache->associate( $wikipage, $key );
-			}
+			$entityCache->associate( $wikipage, $key );
 		}
 
 		return $dataItem;
@@ -239,15 +237,9 @@ abstract class Store implements QueryEngine {
 		$subject = $semanticData->getSubject();
 		$hash = $subject->getHash();
 
-		// Deprecated since 3.1, use SMW::Store::BeforeDataUpdateComplete
-		$hookContainer->run( 'SMWStore::updateDataBefore', [ $this, $semanticData ] );
-
 		$hookContainer->run( 'SMW::Store::BeforeDataUpdateComplete', [ $this, $semanticData ] );
 
 		$this->doDataUpdate( $semanticData );
-
-		// Deprecated since 3.1, use SMW::Store::AfterDataUpdateComplete
-		$hookContainer->run( 'SMWStore::updateDataAfter', [ $this, $semanticData ] );
 
 		$hookContainer->run( 'SMW::Store::AfterDataUpdateComplete', [ $this, $semanticData ] );
 
@@ -255,12 +247,26 @@ abstract class Store implements QueryEngine {
 		$procTime = Timer::getElapsedTime( __METHOD__, 5 );
 
 		$this->logger->info(
-			[ 'Store', 'Update completed: {hash}', 'rev: {rev}', 'procTime: {procTime}' ],
-			[ 'method' => __METHOD__, 'role' => 'production', 'hash' => $hash, 'rev' => $rev, 'procTime' => $procTime ]
+			'Store Update completed: {hash} rev: {rev} procTime: {procTime}',
+			[
+				'method' => __METHOD__,
+				'role' => 'production',
+				'hash' => $hash,
+				'rev' => $rev,
+				'procTime' => $procTime
+			]
 		);
 
-		if ( !$this->getOption( 'smwgAutoRefreshSubject' ) || $semanticData->getOption( Enum::OPT_SUSPEND_PURGE ) ) {
-			return $this->logger->info( [ 'Store', 'Skipping html, parser cache purge' ], [ 'role' => 'user' ] );
+		if ( !$this->getOption( 'smwgAutoRefreshSubject' ) ||
+			$semanticData->getOption( Enum::OPT_SUSPEND_PURGE )
+		) {
+			$this->logger->info(
+				'Store Skipping html, parser cache purge',
+				[
+					'role' => 'user'
+				]
+			);
+			return;
 		}
 
 		$pageUpdater = $applicationFactory->newPageUpdater();
@@ -562,7 +568,7 @@ abstract class Store implements QueryEngine {
 	/**
 	 * @since 2.1
 	 *
-	 * @param string $type
+	 * @param int|string $type
 	 *
 	 * @return mixed
 	 */

@@ -144,7 +144,8 @@ class ConditionBuilder {
 	/**
 	 * @since 2.2
 	 *
-	 * @param string $error
+	 * @param string|array $error
+	 * @param int|string|null $type
 	 */
 	public function addError( $error, $type = Message::TEXT ): void {
 		$this->errors[Message::getHash( $error, $type )] = Message::encode( $error, $type );
@@ -418,7 +419,7 @@ class ConditionBuilder {
 		}
 
 		if ( $diType == DataItem::TYPE_NOTYPE ) {
-			$diType = DataTypeRegistry::getInstance()->getDataItemByType( $orderByProperty->findPropertyTypeID() );
+			$diType = DataTypeRegistry::getInstance()->getDataItemByType( $orderByProperty->findPropertyValueType() );
 		}
 
 		$this->addOrderByData( $sparqlCondition, $mainVariable, $diType );
@@ -499,16 +500,23 @@ class ConditionBuilder {
 
 			$lastDataItem = $propertyChainValue->getLastPropertyChainValue()->getDataItem();
 
+			if ( !$lastDataItem instanceof Property ) {
+				return;
+			}
+
 			$description = $this->descriptionFactory->newSomeProperty(
 				$lastDataItem,
 				$this->descriptionFactory->newThingDescription()
 			);
 
 			foreach ( $propertyChainValue->getPropertyChainValues() as $val ) {
-				$description = $this->descriptionFactory->newSomeProperty(
-					$val->getDataItem(),
-					$description
-				);
+				$property = $val->getDataItem();
+				if ( $property instanceof Property ) {
+					$description = $this->descriptionFactory->newSomeProperty(
+						$property,
+						$description
+					);
+				}
 			}
 
 			// Add and replace Foo.Bar=asc with Bar=asc as we ultimately only

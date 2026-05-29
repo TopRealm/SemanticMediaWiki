@@ -62,9 +62,7 @@ class QueryLinker {
 			}
 		}
 
-		if ( $query->getMainLabel() !== false ) {
-			$params['mainlabel'] = $query->getMainLabel();
-		}
+		$params['mainlabel'] = $query->getMainLabel();
 
 		if ( $query->getQuerySource() !== '' ) {
 			$params['source'] = $query->getQuerySource();
@@ -84,6 +82,11 @@ class QueryLinker {
 		$count = count( $sortKeys );
 
 		if ( $count == 0 ) {
+			// `order=none` produces no sort keys; re-emit it so the
+			// result-continuation link stays unsorted.
+			if ( $query->getOption( Query::SORT_DISABLED ) ) {
+				$params['order'] = 'none';
+			}
 			return $params;
 		}
 

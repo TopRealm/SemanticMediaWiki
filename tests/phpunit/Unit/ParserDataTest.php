@@ -44,8 +44,6 @@ class ParserDataTest extends TestCase {
 		$this->revisionGuard = $this->getMockBuilder( RevisionGuard::class )
 			->disableOriginalConstructor()
 			->getMock();
-
-		$this->testEnvironment->registerObject( 'RevisionGuard', $this->revisionGuard );
 	}
 
 	protected function tearDown(): void {
@@ -143,7 +141,7 @@ class ParserDataTest extends TestCase {
 		);
 	}
 
-	public function testAddDataValueAndPushSemanticDataToParserOutput() {
+	public function testAddDataValueAndCopyToParserOutput() {
 		$titleFactory = MediaWikiServices::getInstance()->getTitleFactory();
 
 		$title = $titleFactory->newFromText( __METHOD__ );
@@ -156,7 +154,7 @@ class ParserDataTest extends TestCase {
 		);
 
 		$this->assertFalse( $instance->getSemanticData()->isEmpty() );
-		$instance->pushSemanticDataToParserOutput();
+		$instance->copyToParserOutput();
 
 		$title = $titleFactory->newFromText( __METHOD__ . '-1' );
 
@@ -349,7 +347,7 @@ class ParserDataTest extends TestCase {
 			)
 		);
 
-		$import->pushSemanticDataToParserOutput();
+		$import->copyToParserOutput();
 
 		$instance = new ParserData(
 			$titleFactory->newFromText( __METHOD__ ),
@@ -478,6 +476,85 @@ class ParserDataTest extends TestCase {
 		$instance->setParserOptions( $parserOptions );
 		$instance->addExtraParserKey( 'Foo' );
 		$instance->addExtraParserKey( 'userlang' );
+	}
+
+	public function testAddExtraParserKeyForDisabledPreferenceKeyDoesNothing() {
+		$this->testEnvironment->withConfiguration( [ 'smwgSetParserCacheKeys' => [] ] );
+
+		$parserOptions = $this->getMockBuilder( ParserOptions::class )
+			->disableOriginalConstructor()
+			->getMock();
+
+		$parserOptions->expects( $this->never() )
+			->method( 'addExtraKey' );
+
+		$title = $this->getMockBuilder( Title::class )
+			->disableOriginalConstructor()
+			->getMock();
+
+		$parserOutput = $this->getMockBuilder( ParserOutput::class )
+			->disableOriginalConstructor()
+			->getMock();
+
+		$parserOutput->expects( $this->never() )
+			->method( 'recordOption' );
+
+		$instance = new ParserData( $title, $parserOutput );
+		$instance->setParserOptions( $parserOptions );
+		$instance->addExtraParserKey( 'userlang' );
+	}
+
+	public function testAddExtraParserKeyForFunctionalKeyIgnoresConfiguration() {
+		$this->testEnvironment->withConfiguration( [ 'smwgSetParserCacheKeys' => [] ] );
+
+		$parserOptions = $this->getMockBuilder( ParserOptions::class )
+			->disableOriginalConstructor()
+			->getMock();
+
+		$parserOptions->expects( $this->once() )
+			->method( 'addExtraKey' )
+			->with( 'smwq' );
+
+		$title = $this->getMockBuilder( Title::class )
+			->disableOriginalConstructor()
+			->getMock();
+
+		$parserOutput = $this->getMockBuilder( ParserOutput::class )
+			->disableOriginalConstructor()
+			->getMock();
+
+		$parserOutput->expects( $this->never() )
+			->method( 'recordOption' );
+
+		$instance = new ParserData( $title, $parserOutput );
+		$instance->setParserOptions( $parserOptions );
+		$instance->addExtraParserKey( 'smwq' );
+	}
+
+	public function testAddExtraParserKeyForDisabledDateformatDoesNothing() {
+		$this->testEnvironment->withConfiguration( [ 'smwgSetParserCacheKeys' => [] ] );
+
+		$parserOptions = $this->getMockBuilder( ParserOptions::class )
+			->disableOriginalConstructor()
+			->getMock();
+
+		$parserOptions->expects( $this->never() )
+			->method( 'addExtraKey' );
+
+		$title = $this->getMockBuilder( Title::class )
+			->disableOriginalConstructor()
+			->getMock();
+
+		$parserOutput = $this->getMockBuilder( ParserOutput::class )
+			->disableOriginalConstructor()
+			->getMock();
+
+		$parserOutput->expects( $this->never() )
+			->method( 'recordOption' );
+
+		$instance = new ParserData( $title, $parserOutput );
+		$instance->setParserOptions( $parserOptions );
+		$instance->addExtraParserKey( 'dateformat' );
 	}
 
 }

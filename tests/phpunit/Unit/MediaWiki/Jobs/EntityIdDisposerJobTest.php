@@ -6,11 +6,12 @@ use MediaWiki\Title\Title;
 use PHPUnit\Framework\TestCase;
 use SMW\Connection\ConnectionManager;
 use SMW\DataItems\WikiPage;
+use SMW\IteratorFactory;
 use SMW\Iterators\ResultIterator;
 use SMW\MediaWiki\Connection\Database;
+use SMW\MediaWiki\JobFactory;
 use SMW\MediaWiki\Jobs\EntityIdDisposerJob;
 use SMW\SQLStore\SQLStore;
-use SMW\Tests\TestEnvironment;
 use SMW\Tests\Unit\MediaWiki\Connection\MockSelectQueryBuilderTrait;
 
 /**
@@ -26,13 +27,10 @@ class EntityIdDisposerJobTest extends TestCase {
 
 	use MockSelectQueryBuilderTrait;
 
-	private $testEnvironment;
 	private $connection;
 
 	protected function setUp(): void {
 		parent::setUp();
-
-		$this->testEnvironment = new TestEnvironment();
 
 		$this->connection = $this->getMockBuilder( Database::class )
 			->disableOriginalConstructor()
@@ -41,7 +39,9 @@ class EntityIdDisposerJobTest extends TestCase {
 		$this->connection->expects( $this->any() )
 			->method( 'newSelectQueryBuilder' )
 			->willReturnCallback( fn () => $this->createMockSelectQueryBuilder() );
+	}
 
+	private function newStore(): SQLStore {
 		$store = $this->getMockBuilder( SQLStore::class )
 			->getMockForAbstractClass();
 
@@ -55,12 +55,37 @@ class EntityIdDisposerJobTest extends TestCase {
 
 		$store->setConnectionManager( $connectionManager );
 
-		$this->testEnvironment->registerObject( 'Store', $store );
+		return $store;
 	}
 
-	protected function tearDown(): void {
-		$this->testEnvironment->tearDown();
-		parent::tearDown();
+	private function newIteratorFactory(): IteratorFactory {
+		return new IteratorFactory();
+	}
+
+	private function newJobFactory(): JobFactory {
+		$jobFactory = $this->getMockBuilder( JobFactory::class )
+			->disableOriginalConstructor()
+			->getMock();
+
+		$nextJob = $this->getMockBuilder( EntityIdDisposerJob::class )
+			->disableOriginalConstructor()
+			->getMock();
+
+		$jobFactory->expects( $this->any() )
+			->method( 'newEntityIdDisposerJob' )
+			->willReturn( $nextJob );
+
+		return $jobFactory;
+	}
+
+	private function newJob( Title $title, array $params = [] ): EntityIdDisposerJob {
+		return new EntityIdDisposerJob(
+			$title,
+			$params,
+			$this->newStore(),
+			$this->newIteratorFactory(),
+			$this->newJobFactory()
+		);
 	}
 
 	public function testCanConstruct() {
@@ -70,7 +95,7 @@ class EntityIdDisposerJobTest extends TestCase {
 
 		$this->assertInstanceOf(
 			EntityIdDisposerJob::class,
-			new EntityIdDisposerJob( $title )
+			$this->newJob( $title )
 		);
 	}
 
@@ -79,7 +104,7 @@ class EntityIdDisposerJobTest extends TestCase {
 			->disableOriginalConstructor()
 			->getMock();
 
-		$instance = new EntityIdDisposerJob( $title );
+		$instance = $this->newJob( $title );
 
 		$this->assertInstanceOf(
 			ResultIterator::class,
@@ -92,7 +117,7 @@ class EntityIdDisposerJobTest extends TestCase {
 			->disableOriginalConstructor()
 			->getMock();
 
-		$instance = new EntityIdDisposerJob( $title );
+		$instance = $this->newJob( $title );
 
 		$this->assertInstanceOf(
 			ResultIterator::class,
@@ -105,7 +130,7 @@ class EntityIdDisposerJobTest extends TestCase {
 			->disableOriginalConstructor()
 			->getMock();
 
-		$instance = new EntityIdDisposerJob( $title );
+		$instance = $this->newJob( $title );
 
 		$this->assertInstanceOf(
 			ResultIterator::class,
@@ -118,7 +143,7 @@ class EntityIdDisposerJobTest extends TestCase {
 			->disableOriginalConstructor()
 			->getMock();
 
-		$instance = new EntityIdDisposerJob( $title );
+		$instance = $this->newJob( $title );
 
 		$this->assertInstanceOf(
 			ResultIterator::class,
@@ -148,10 +173,7 @@ class EntityIdDisposerJobTest extends TestCase {
 
 		$subject = WikiPage::newFromText( __METHOD__ );
 
-		$instance = new EntityIdDisposerJob(
-			$subject->getTitle(),
-			$parameters
-		);
+		$instance = $this->newJob( $subject->getTitle(), $parameters );
 
 		$this->assertTrue(
 			$instance->run()

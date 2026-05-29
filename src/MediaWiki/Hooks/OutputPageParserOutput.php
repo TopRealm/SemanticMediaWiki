@@ -2,15 +2,21 @@
 
 namespace SMW\MediaWiki\Hooks;
 
+use MediaWiki\Output\Hook\OutputPageParserOutputHook;
 use MediaWiki\Output\OutputPage;
 use MediaWiki\Parser\ParserOutput;
 use MediaWiki\Title\Title;
+use MediaWiki\User\Options\UserOptionsLookup;
+use Psr\Log\LoggerInterface;
+use SMW\Factbox\FactboxFactory;
 use SMW\Factbox\FactboxText;
-use SMW\MediaWiki\HookListener;
-use SMW\MediaWiki\IndicatorRegistry;
+use SMW\MediaWiki\IndicatorRegistryFactory;
 use SMW\MediaWiki\Permission\PermissionExaminer;
+use SMW\MediaWiki\PermissionManager;
+use SMW\MediaWiki\PostProcHandlerFactory;
 use SMW\NamespaceExaminer;
-use SMW\Services\ServicesFactory as ApplicationFactory;
+use SMW\Parser\InTextAnnotationParserFactory;
+use SMW\ParserData;
 
 /**
  * OutputPageParserOutput hook is called after parse, before the HTML is
@@ -29,45 +35,51 @@ use SMW\Services\ServicesFactory as ApplicationFactory;
  *
  * @author mwjames
  */
-class OutputPageParserOutput implements HookListener {
-
-	private ?IndicatorRegistry $indicatorRegistry = null;
+class OutputPageParserOutput implements OutputPageParserOutputHook {
 
 	/**
-	 * @since 1.9
+	 * @since 7.0.0
 	 */
 	public function __construct(
 		private readonly NamespaceExaminer $namespaceExaminer,
-		private readonly PermissionExaminer $permissionExaminer,
 		private readonly FactboxText $factboxText,
+		private readonly FactboxFactory $factboxFactory,
+		private readonly UserOptionsLookup $userOptionsLookup,
+		private readonly PermissionManager $permissionManager,
+		private readonly IndicatorRegistryFactory $indicatorRegistryFactory,
+		private readonly PostProcHandlerFactory $postProcHandlerFactory,
+		private readonly InTextAnnotationParserFactory $inTextAnnotationParserFactory,
+		private readonly LoggerInterface $logger,
 	) {
 	}
 
 	/**
-	 * @since 3.1
-	 *
-	 * @param IndicatorRegistry $indicatorRegistry
+	 * @since 7.0.0
 	 */
-	public function setIndicatorRegistry( IndicatorRegistry $indicatorRegistry ): void {
-		$this->indicatorRegistry = $indicatorRegistry;
-	}
-
-	/**
-	 * @since 1.9
-	 */
-	public function process( OutputPage &$outputPage, ParserOutput $parserOutput ) {
+	public function onOutputPageParserOutput( $outputPage, $parserOutput ): void {
 		$title = $outputPage->getTitle();
 
 		if ( $title === null || $title->isSpecialPage() || $title->isRedirect() ) {
-			return true;
+			return;
 		}
 
 		if ( !$this->namespaceExaminer->isSemanticEnabled( $title->getNamespace() ) ) {
-			return true;
+			return;
 		}
 
 		$context = $outputPage->getContext();
 		$request = $context->getRequest();
+		$user = $outputPage->getUser();
+
+		$permissionExaminer = new PermissionExaminer( $this->permissionManager, $user );
+
+		$indicatorRegistry = $this->indicatorRegistryFactory->newFor(
+			(bool)$this->userOptionsLookup->getOption(
+				$user,
+				GetPreferences::SHOW_ENTITY_ISSUE_PANEL,
+				false
+			)
+		);
 
 		$options = [
 			'action' => $request->getVal( 'action' ),
@@ -78,9 +90,8 @@ class OutputPageParserOutput implements HookListener {
 
 		if (
 			$title->exists() &&
-			$this->indicatorRegistry !== null &&
-			$this->indicatorRegistry->hasIndicator( $title, $this->permissionExaminer, $options ) ) {
-			$this->indicatorRegistry->attachIndicators( $outputPage );
+			$indicatorRegistry->hasIndicator( $title, $permissionExaminer, $options ) ) {
+			$indicatorRegistry->attachIndicators( $outputPage );
 		}
 
 		$this->addFactbox( $outputPage, $parserOutput );
@@ -94,9 +105,7 @@ class OutputPageParserOutput implements HookListener {
 			return '';
 		}
 
-		$applicationFactory = ApplicationFactory::getInstance();
-
-		$postProcHandler = $applicationFactory->newPostProcHandler( $parserOutput );
+		$postProcHandler = $this->postProcHandlerFactory->newFor( $parserOutput );
 
 		$html = $postProcHandler->getHtml(
 			$title,
@@ -118,9 +127,7 @@ class OutputPageParserOutput implements HookListener {
 			return '';
 		}
 
-		$applicationFactory = ApplicationFactory::getInstance();
-
-		$cachedFactbox = $applicationFactory->singleton( 'FactboxFactory' )->newCachedFactbox();
+		$cachedFactbox = $this->factboxFactory->newCachedFactbox();
 
 		$cachedFactbox->prepare(
 			$outputPage,
@@ -144,12 +151,10 @@ class OutputPageParserOutput implements HookListener {
 
 			$text = $parserOutput->getContentHolderText();
 
-			$parserData = ApplicationFactory::getInstance()->newParserData(
-				$outputPage->getTitle(),
-				$parserOutput
-			);
+			$parserData = new ParserData( $outputPage->getTitle(), $parserOutput );
+			$parserData->setLogger( $this->logger );
 
-			$inTextAnnotationParser = ApplicationFactory::getInstance()->newInTextAnnotationParser( $parserData );
+			$inTextAnnotationParser = $this->inTextAnnotationParserFactory->newFor( $parserData );
 			$inTextAnnotationParser->parse( $text );
 
 			return $parserData->getOutput();

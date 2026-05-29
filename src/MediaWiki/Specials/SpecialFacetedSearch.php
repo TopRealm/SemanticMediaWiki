@@ -3,6 +3,7 @@
 namespace SMW\MediaWiki\Specials;
 
 use MediaWiki\Html\TemplateParser;
+use MediaWiki\MediaWikiServices;
 use MediaWiki\SpecialPage\SpecialPage;
 use SMW\MediaWiki\Hooks\GetPreferences;
 use SMW\MediaWiki\Outputs;
@@ -16,7 +17,8 @@ use SMW\MediaWiki\Specials\FacetedSearch\ParametersProcessor;
 use SMW\MediaWiki\Specials\FacetedSearch\Profile;
 use SMW\MediaWiki\Specials\FacetedSearch\ResultFetcher;
 use SMW\MediaWiki\Specials\FacetedSearch\TreeBuilder;
-use SMW\Services\ServicesFactory;
+use SMW\Schema\SchemaFactory;
+use SMW\Store;
 use SMW\Utils\UrlArgs;
 
 /**
@@ -27,7 +29,13 @@ use SMW\Utils\UrlArgs;
  */
 class SpecialFacetedSearch extends SpecialPage {
 
-	public function __construct() {
+	/**
+	 * @since 7.0.0
+	 */
+	public function __construct(
+		private readonly Store $store,
+		private readonly SchemaFactory $schemaFactory
+	) {
 		parent::__construct( 'FacetedSearch', '', true, false, 'default', true );
 	}
 
@@ -39,7 +47,7 @@ class SpecialFacetedSearch extends SpecialPage {
 		$output = $this->getOutput();
 		$request = $this->getRequest();
 
-		$this->addHelpLink( $this->msg( 'smw-specials-facetedsearch-helplink' )->escaped(), true );
+		$this->addHelpLink( $this->msg( 'smw-specials-facetedsearch-helplink' )->text(), true );
 
 		$output->addModuleStyles(
 			[
@@ -67,14 +75,11 @@ class SpecialFacetedSearch extends SpecialPage {
 
 		$title = $this->getPageTitle();
 
-		$servicesFactory = ServicesFactory::getInstance();
-		$store = $servicesFactory->getStore();
-		$userOptionsLookup = $servicesFactory->singleton( 'UserOptionsLookup' );
+		$userOptionsLookup = MediaWikiServices::getInstance()->getUserOptionsLookup();
 
 		/**
 		 * Profile information
 		 */
-		$schemaFactory = $servicesFactory->singleton( 'SchemaFactory' );
 		$default_profile = $userOptionsLookup->getOption(
 			$this->getUser(),
 			GetPreferences::FACETEDSEARCH_PROFILE_PREFERENCE, ''
@@ -86,7 +91,7 @@ class SpecialFacetedSearch extends SpecialPage {
 		}
 
 		$profile = new Profile(
-			$schemaFactory,
+			$this->schemaFactory,
 			$profileName
 		);
 
@@ -99,20 +104,20 @@ class SpecialFacetedSearch extends SpecialPage {
 		 * Result fetcher
 		 */
 		$resultFetcher = new ResultFetcher(
-			$store
+			$this->store
 		);
 
 		/**
 		 * Facet/Filter card builder
 		 */
 		$treeBuilder = new TreeBuilder(
-			$store
+			$this->store
 		);
 
 		$filterFactory = new FilterFactory(
 			$templateParser,
 			$treeBuilder,
-			$schemaFactory
+			$this->schemaFactory
 		);
 
 		$facetBuilder = new FacetBuilder(

@@ -53,8 +53,6 @@ class ConjunctionQueryDBIntegrationTest extends SMWIntegrationTestCase {
 		$this->fixturesProvider->setupDependencies( $this->getStore() );
 
 		$this->queryParser = ApplicationFactory::getInstance()->getQueryFactory()->newQueryParser();
-
-		$utilityFactory->newMwHooksHandler()->invokeHooksFromRegistry();
 	}
 
 	protected function tearDown(): void {
@@ -78,7 +76,7 @@ class ConjunctionQueryDBIntegrationTest extends SMWIntegrationTestCase {
 			->newEmptySemanticData();
 
 		$semanticDataOfNeverland->addPropertyObjectValue(
-			Property::newFromUserLabel( 'LocatedIn' )->setPropertyTypeId( '_wpg' ),
+			Property::newFromUserLabel( 'LocatedIn' )->setPropertyValueType( '_wpg' ),
 			new WikiPage( 'BananaWonderland', NS_MAIN )
 		);
 
@@ -92,7 +90,7 @@ class ConjunctionQueryDBIntegrationTest extends SMWIntegrationTestCase {
 			->newEmptySemanticData();
 
 		$semanticDataOfDreamland->addPropertyObjectValue(
-			Property::newFromUserLabel( 'LocatedIn' )->setPropertyTypeId( '_wpg' ),
+			Property::newFromUserLabel( 'LocatedIn' )->setPropertyValueType( '_wpg' ),
 			new WikiPage( 'BananaWonderland', NS_MAIN )
 		);
 
@@ -111,19 +109,19 @@ class ConjunctionQueryDBIntegrationTest extends SMWIntegrationTestCase {
 			->newEmptySemanticData();
 
 		$semanticDataOfWonderland->addPropertyObjectValue(
-			Property::newFromUserLabel( 'MemberOf' )->setPropertyTypeId( '_wpg' ),
+			Property::newFromUserLabel( 'MemberOf' )->setPropertyValueType( '_wpg' ),
 			new WikiPage( 'Wonderland', NS_MAIN )
 		);
 
 		$this->getStore()->updateData( $semanticDataOfWonderland );
 
 		$someProperty = new SomeProperty(
-			Property::newFromUserLabel( 'LocatedIn' )->setPropertyTypeId( '_wpg' ),
+			Property::newFromUserLabel( 'LocatedIn' )->setPropertyValueType( '_wpg' ),
 			new SomeProperty(
-				Property::newFromUserLabel( 'MemberOf' )->setPropertyTypeId( '_wpg' ),
+				Property::newFromUserLabel( 'MemberOf' )->setPropertyValueType( '_wpg' ),
 				new ValueDescription(
 					new WikiPage( 'Wonderland', NS_MAIN, '' ),
-					Property::newFromUserLabel( 'MemberOf' )->setPropertyTypeId( '_wpg' ), SMW_CMP_EQ
+					Property::newFromUserLabel( 'MemberOf' )->setPropertyValueType( '_wpg' ), SMW_CMP_EQ
 				)
 			)
 		);
@@ -182,7 +180,7 @@ class ConjunctionQueryDBIntegrationTest extends SMWIntegrationTestCase {
 		 * Page annotated with [[Born in::Paris]]
 		 */
 		$property = Property::newFromUserLabel( 'Born in' );
-		$property->setPropertyTypeId( '_wpg' );
+		$property->setPropertyValueType( '_wpg' );
 
 		$semanticData = $this->semanticDataFactory->newEmptySemanticData( __METHOD__ . 'PageOughtToBeSelected' );
 

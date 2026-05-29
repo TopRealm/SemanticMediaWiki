@@ -176,7 +176,7 @@ class CallableUpdateTest extends TestCase {
 
 		$instance->setLogger( $this->spyLogger );
 
-		$instance->enabledDeferredUpdate( false );
+		$instance->isDeferrableUpdate( false );
 		$instance->pushUpdate();
 	}
 
@@ -230,22 +230,6 @@ class CallableUpdateTest extends TestCase {
 		$instance->pushUpdate();
 
 		$this->testEnvironment->executePendingDeferredUpdates();
-	}
-
-	public function testStage() {
-		$instance = new CallableUpdate();
-
-		$this->assertEquals(
-			'post',
-			$instance->getStage()
-		);
-
-		$instance->asPresend();
-
-		$this->assertEquals(
-			'pre',
-			$instance->getStage()
-		);
 	}
 
 }

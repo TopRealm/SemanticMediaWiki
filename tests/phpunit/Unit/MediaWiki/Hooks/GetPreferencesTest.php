@@ -2,12 +2,14 @@
 
 namespace SMW\Tests\Unit\MediaWiki\Hooks;
 
+use MediaWiki\HookContainer\HookContainer;
 use MediaWiki\User\User;
 use PHPUnit\Framework\TestCase;
-use SMW\MediaWiki\HookDispatcher;
+use SMW\GroupPermissions;
 use SMW\MediaWiki\Hooks\GetPreferences;
-use SMW\MediaWiki\Permission\PermissionExaminer;
+use SMW\MediaWiki\PermissionManager;
 use SMW\Schema\SchemaFactory;
+use SMW\Settings;
 
 /**
  * @covers \SMW\MediaWiki\Hooks\GetPreferences
@@ -20,36 +22,33 @@ use SMW\Schema\SchemaFactory;
  */
 class GetPreferencesTest extends TestCase {
 
-	private $hookDispatcher;
-	private $permissionExaminer;
+	private $hookContainer;
 	private $schemaFactory;
+	private $settings;
+	private $permissionManager;
 
 	protected function setUp(): void {
 		parent::setUp();
 
-		$this->hookDispatcher = $this->getMockBuilder( HookDispatcher::class )
-			->disableOriginalConstructor()
-			->getMock();
+		$this->hookContainer = $this->createMock( HookContainer::class );
+		$this->schemaFactory = $this->createMock( SchemaFactory::class );
+		$this->settings = $this->createMock( Settings::class );
+		$this->permissionManager = $this->createMock( PermissionManager::class );
+	}
 
-		$this->permissionExaminer = $this->getMockBuilder( PermissionExaminer::class )
-			->disableOriginalConstructor()
-			->getMock();
-
-		$this->schemaFactory = $this->getMockBuilder( SchemaFactory::class )
-			->disableOriginalConstructor()
-			->getMock();
+	private function newInstance(): GetPreferences {
+		return new GetPreferences(
+			$this->schemaFactory,
+			$this->hookContainer,
+			$this->settings,
+			$this->permissionManager
+		);
 	}
 
 	public function testCanConstruct() {
-		$user = $this->getMockBuilder( User::class )
-			->disableOriginalConstructor()
-			->getMock();
-
-		$preferences = [];
-
 		$this->assertInstanceOf(
 			GetPreferences::class,
-			new GetPreferences( $this->permissionExaminer, $this->schemaFactory )
+			$this->newInstance()
 		);
 	}
 
@@ -57,61 +56,30 @@ class GetPreferencesTest extends TestCase {
 	 * @dataProvider keyProvider
 	 */
 	public function testProcess( $key ) {
-		$this->permissionExaminer->expects( $this->any() )
-			->method( 'hasPermissionOf' )
-			->willReturn( true );
+		// Grant only the permission the production code is expected to check
+		// (`VIEW_JOBQUEUE_WATCHLIST`). A blanket `willReturn( true )` would not
+		// detect a regression that replaced this constant with a different one.
+		$this->permissionManager->method( 'userHasRight' )
+			->willReturnCallback(
+				static fn ( $user, $right ): bool => $right === GroupPermissions::VIEW_JOBQUEUE_WATCHLIST
+			);
 
-		$user = $this->getMockBuilder( User::class )
-			->disableOriginalConstructor()
-			->getMock();
-
+		$user = $this->createMock( User::class );
 		$preferences = [];
 
-		$instance = new GetPreferences(
-			$this->permissionExaminer,
-			$this->schemaFactory
-		);
+		$this->newInstance()->onGetPreferences( $user, $preferences );
 
-		$instance->setHookDispatcher(
-			$this->hookDispatcher
-		);
-
-		$instance->setOptions(
-			[
-				'smwgEnabledEditPageHelp' => false
-			]
-		);
-
-		$instance->process( $user, $preferences );
-
-		$this->assertArrayHasKey(
-			$key,
-			$preferences
-		);
+		$this->assertArrayHasKey( $key, $preferences );
 	}
 
 	public function keyProvider() {
-		$provider[] = [
-			'smw-prefs-intro'
+		return [
+			[ 'smw-prefs-intro' ],
+			[ 'smw-prefs-ask-options-tooltip-display' ],
+			[ 'smw-prefs-general-options-time-correction' ],
+			[ 'smw-prefs-general-options-disable-editpage-info' ],
+			[ 'smw-prefs-general-options-jobqueue-watchlist' ],
 		];
-
-		$provider[] = [
-			'smw-prefs-ask-options-tooltip-display'
-		];
-
-		$provider[] = [
-			'smw-prefs-general-options-time-correction'
-		];
-
-		$provider[] = [
-			'smw-prefs-general-options-disable-editpage-info'
-		];
-
-		$provider[] = [
-			'smw-prefs-general-options-jobqueue-watchlist'
-		];
-
-		return $provider;
 	}
 
 }

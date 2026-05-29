@@ -38,7 +38,7 @@ class FactboxTest extends TestCase {
 		$this->testEnvironment = new TestEnvironment();
 		$this->stringValidator = $this->testEnvironment->getUtilityFactory()->newValidatorFactory()->newStringValidator();
 
-		$this->testEnvironment->addConfiguration( 'smwgShowFactbox', SMW_FACTBOX_NONEMPTY );
+		$this->testEnvironment->addConfiguration( 'smwgShowFactbox', 'nonempty' );
 
 		$this->displayTitleFinder = $this->getMockBuilder( DisplayTitleFinder::class )
 			->disableOriginalConstructor()
@@ -352,7 +352,7 @@ class FactboxTest extends TestCase {
 			->willReturn( $test['isUserDefined'] );
 
 		$property->expects( $this->any() )
-			->method( 'findPropertyTypeID' )
+			->method( 'findPropertyValueType' )
 			->willReturn( '_wpg' );
 
 		$property->expects( $this->any() )

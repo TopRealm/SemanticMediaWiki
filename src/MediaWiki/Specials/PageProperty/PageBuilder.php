@@ -79,7 +79,7 @@ class PageBuilder {
 		$property = $propertyValue->getDataItem();
 
 		$isBrowsableType = DataTypeRegistry::getInstance()->isBrowsableType(
-			$property->findPropertyTypeID()
+			$property->findPropertyValueType()
 		);
 
 		$list = [];
@@ -129,7 +129,7 @@ class PageBuilder {
 		$this->htmlFormRenderer
 			->setName( 'pageproperty' )
 			->withFieldset()
-			->addParagraph( Message::get( 'smw_pp_docu', Message::TEXT, Message::USER_LANGUAGE ) )
+			->addParagraph( Message::get( 'smw_pp_docu', Message::ESCAPED, Message::USER_LANGUAGE ) )
 			->addPaging(
 				(int)$this->options->safeGet( 'limit', 20 ),
 				(int)$this->options->safeGet( 'offset', 0 ),

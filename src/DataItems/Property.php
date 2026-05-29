@@ -261,7 +261,7 @@ class Property extends DataItem {
 	public function getCanonicalDiWikiPage( string $subobjectName = '' ): ?WikiPage {
 		if ( $this->isUserDefined() ) {
 			$dbkey = $this->m_key;
-		} elseif ( $this->m_key === $this->findPropertyTypeID() ) {
+		} elseif ( $this->m_key === $this->findPropertyValueType() ) {
 			// If _dat as property [[Date::...]] refers directly to its _dat type
 			// then use the en-label as canonical representation
 			$dbkey = PropertyRegistry::getInstance()->findPropertyLabelFromIdByLanguageCode( $this->m_key, 'en' );
@@ -278,25 +278,6 @@ class Property extends DataItem {
 		}
 
 		return $this->newDIWikiPage( $dbkey, $subobjectName );
-	}
-
-	/**
-	 * @since 2.4
-	 * @suppress PhanTypeMismatchReturnSuperType
-	 */
-	public function getRedirectTarget(): self {
-		if ( $this->m_inverse ) {
-			return $this;
-		}
-
-		return ApplicationFactory::getInstance()->getStore()->getRedirectTarget( $this );
-	}
-
-	/**
-	 * @deprecated since 3.0, use Property::setPropertyValueType
-	 */
-	public function setPropertyTypeId( string $valueType ): Property {
-		return $this->setPropertyValueType( $valueType );
 	}
 
 	/**
@@ -321,13 +302,6 @@ class Property extends DataItem {
 		}
 
 		throw new RuntimeException( 'DataType cannot be altered for a predefined property' );
-	}
-
-	/**
-	 * @deprecated since 3.0, use Property::findPropertyValueType
-	 */
-	public function findPropertyTypeId(): string {
-		return $this->findPropertyValueType();
 	}
 
 	/**

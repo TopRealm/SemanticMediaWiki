@@ -27,8 +27,6 @@ class QueryDependencyLinksStore {
 
 	private Store $store;
 
-	private NamespaceExaminer $namespaceExaminer;
-
 	private bool $isEnabled = true;
 
 	/**
@@ -50,9 +48,9 @@ class QueryDependencyLinksStore {
 	public function __construct(
 		private QueryResultDependencyListResolver $queryResultDependencyListResolver,
 		private DependencyLinksTableUpdater $dependencyLinksTableUpdater,
+		private readonly NamespaceExaminer $namespaceExaminer,
 	) {
 		$this->store = $this->dependencyLinksTableUpdater->getStore();
-		$this->namespaceExaminer = ApplicationFactory::getInstance()->getNamespaceExaminer();
 	}
 
 	/**
@@ -289,7 +287,7 @@ class QueryDependencyLinksStore {
 			'smw_iw !=' . $connection->addQuotes( SMW_SQL3_SMWDELETEIW )
 		);
 
-		return $this->store->getObjectIds()->getDataItemPoolHashListFor(
+		return $this->store->getObjectIds()->getDataItemsFromList(
 			$targetLinksIdList,
 			$poolRequestOptions
 		);
@@ -313,6 +311,10 @@ class QueryDependencyLinksStore {
 
 		$subject = $queryResult->getQuery()->getContextPage();
 		$hash = $queryResult->getQuery()->getQueryId();
+
+		if ( $subject === null ) {
+			return null;
+		}
 
 		$sid = $this->dependencyLinksTableUpdater->getId(
 			$subject,
@@ -347,7 +349,7 @@ class QueryDependencyLinksStore {
 		$deferredTransactionalUpdate->markAsPending( $this->isCommandLineMode );
 		$deferredTransactionalUpdate->setFingerprint( $hash );
 
-		$deferredTransactionalUpdate->enabledDeferredUpdate( true );
+		$deferredTransactionalUpdate->isDeferrableUpdate( true );
 		$deferredTransactionalUpdate->waitOnTransactionIdle();
 
 		$deferredTransactionalUpdate->pushUpdate();
@@ -393,6 +395,10 @@ class QueryDependencyLinksStore {
 			);
 		}
 
+		if ( !$subject instanceof WikiPage ) {
+			return;
+		}
+
 		// SID < 0 means the storage update/process has not been finalized
 		// (new object hasn't been registered)
 		if ( $sid >= 1 ) {
@@ -422,10 +428,6 @@ class QueryDependencyLinksStore {
 		}
 
 		$query = $queryResult->getQuery();
-
-		if ( $query === null ) {
-			return false;
-		}
 
 		$actions = [
 			// #2484 Avoid any update activities during a stashedit API access

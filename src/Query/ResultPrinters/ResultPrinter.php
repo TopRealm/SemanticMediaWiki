@@ -15,6 +15,7 @@ use SMW\Query\Query;
 use SMW\Query\QueryResult;
 use SMW\Query\Result\StringResult;
 use SMW\Query\ResultPrinter as IResultPrinter;
+use SMW\Services\ServicesFactory;
 
 /**
  * Abstract base class for SMW's novel query printing mechanism. It implements
@@ -229,7 +230,12 @@ abstract class ResultPrinter implements IResultPrinter {
 	 * @return bool
 	 */
 	public function isEnabledFeature( $feature ): bool {
-		return ( (int)$GLOBALS['smwgResultFormatsFeatures'] & $feature ) != 0;
+		// Read via Settings (not $GLOBALS directly) so the value goes through
+		// LegacyConstantNormalizer's string->int normalization (#6586). A direct
+		// $GLOBALS read would see `'template-outsep'` when the admin uses the new
+		// form, and `(int)'template-outsep'` evaluates to 0, silently disabling
+		// the feature.
+		return ( (int)ServicesFactory::getInstance()->getSettings()->get( 'smwgResultFormatsFeatures' ) & $feature ) != 0;
 	}
 
 	/**
@@ -516,14 +522,14 @@ abstract class ResultPrinter implements IResultPrinter {
 	 * @since 1.8
 	 *
 	 * @param QueryResult $res
-	 * @param $outputMode
+	 * @param int $outputMode
 	 * @param string $classAffix
 	 *
 	 * @return Infolink
 	 * @throws Exception
 	 */
 	protected function getLink( QueryResult $res, $outputMode, $classAffix = '' ) {
-		$link = $res->getQueryLink( $this->getSearchLabel( $outputMode ) );
+		$link = $res->getQueryLink( $this->getSearchLabel( $outputMode ) ?? false );
 
 		if ( $classAffix !== '' ) {
 			$link->setStyle( 'smw-' . $this->params['format'] . '-' . Sanitizer::escapeClass( $classAffix ) );
@@ -548,7 +554,7 @@ abstract class ResultPrinter implements IResultPrinter {
 	 * @since 1.8
 	 *
 	 * @param QueryResult $res
-	 * @param $outputMode
+	 * @param int $outputMode
 	 *
 	 * @return Infolink
 	 * @throws Exception
@@ -622,24 +628,24 @@ abstract class ResultPrinter implements IResultPrinter {
 	 * given text. Otherwise return text as is.
 	 *
 	 * @param string $text
-	 * @param string $outputmode
+	 * @param int $outputMode
 	 *
 	 * @return string|null
 	 */
-	protected function escapeText( $text, $outputmode ): ?string {
-		return $outputmode == SMW_OUTPUT_HTML ? htmlspecialchars( $text ?? '' ) : $text;
+	protected function escapeText( $text, $outputMode ): ?string {
+		return $outputMode == SMW_OUTPUT_HTML ? htmlspecialchars( $text ?? '' ) : $text;
 	}
 
 	/**
 	 * Get the string the user specified as a text for the "further results" link,
 	 * properly escaped for the current output mode.
 	 *
-	 * @param string $outputmode
+	 * @param int $outputMode
 	 *
 	 * @return string|null
 	 */
-	protected function getSearchLabel( $outputmode ): ?string {
-		return $this->escapeText( $this->mSearchlabel, $outputmode );
+	protected function getSearchLabel( $outputMode ): ?string {
+		return $this->escapeText( $this->mSearchlabel, $outputMode );
 	}
 
 	/**
@@ -689,6 +695,17 @@ abstract class ResultPrinter implements IResultPrinter {
 	 */
 	public function isExportFormat(): bool {
 		return false;
+	}
+
+	/**
+	 * Whether this printer's rendered output varies with the viewing user's
+	 * interface language. When false, SMW can skip adding the `userlang` key
+	 * to the parser cache for queries using this format.
+	 *
+	 * @since 7.0.0
+	 */
+	public function dependsOnUserLanguage(): bool {
+		return true;
 	}
 
 	/**

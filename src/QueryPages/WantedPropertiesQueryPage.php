@@ -106,7 +106,7 @@ class WantedPropertiesQueryPage extends QueryPage {
 			[
 				'class' => 'smw-special-filter'
 			],
-			$this->msg( 'smw-special-wantedproperties-filter-label' )->text() .
+			$this->msg( 'smw-special-wantedproperties-filter-label' )->escaped() .
 			'&nbsp;' .
 			Html::rawElement(
 				'span',
@@ -142,6 +142,8 @@ class WantedPropertiesQueryPage extends QueryPage {
 	 * @param array $result First item is Property, second item is int
 	 *
 	 * @return string
+	 *
+	 * @suppress PhanParamSignatureMismatch
 	 */
 	public function formatResult( $skin, $result ) {
 		// Only display user-defined properties because it can happen that

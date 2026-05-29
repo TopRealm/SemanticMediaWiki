@@ -298,7 +298,7 @@ class HierarchyLookup {
 			$property
 		);
 
-		if ( $propertyList === null || $propertyList === [] ) {
+		if ( $propertyList === false || $propertyList === [] ) {
 			return;
 		}
 
@@ -369,8 +369,13 @@ class HierarchyLookup {
 		$this->inMemoryCache[$key] = $subjects;
 
 		$this->logger->info(
-			[ 'HierarchyLookup', "Lookup for: {id}, {origin}" ],
-			[ 'method' => __METHOD__, 'role' => 'user', 'id' => $property->getKey(), 'origin' => $subject ]
+			'HierarchyLookup Lookup for: {id}, {origin}',
+			[
+				'method' => __METHOD__,
+				'role' => 'user',
+				'id' => $property->getKey(),
+				'origin' => $subject
+			]
 		);
 
 		return $subjects;

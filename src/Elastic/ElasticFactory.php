@@ -2,7 +2,9 @@
 
 namespace SMW\Elastic;
 
-use Onoi\EventDispatcher\DispatchContext;
+use MediaWiki\Html\TemplateParser;
+use MediaWiki\Logger\LoggerFactory;
+use MediaWiki\MediaWikiServices;
 use Onoi\MessageReporter\MessageReporter;
 use Onoi\MessageReporter\NullMessageReporter;
 use SMW\Elastic\Admin\ElasticClientTaskHandler;
@@ -13,7 +15,6 @@ use SMW\Elastic\Admin\ReplicationInfoProvider;
 use SMW\Elastic\Admin\SettingsInfoProvider;
 use SMW\Elastic\Connection\Client as ElasticClient;
 use SMW\Elastic\Connection\ConnectionProvider;
-use SMW\Elastic\Connection\DummyClient;
 use SMW\Elastic\Connection\LockManager;
 use SMW\Elastic\Hooks\UpdateEntityCollationComplete;
 use SMW\Elastic\Indexer\Attachment\FileAttachment;
@@ -40,6 +41,7 @@ use SMW\Elastic\QueryEngine\DescriptionInterpreters\ValueDescriptionInterpreter;
 use SMW\Elastic\QueryEngine\QueryEngine;
 use SMW\Elastic\QueryEngine\TermsLookup\CachingTermsLookup;
 use SMW\Elastic\QueryEngine\TermsLookup\TermsLookup;
+use SMW\EventDispatcher\DispatchContext;
 use SMW\Options;
 use SMW\Services\ServicesContainer;
 use SMW\Services\ServicesFactory as ApplicationFactory;
@@ -53,15 +55,6 @@ use SMW\Store;
  * @author mwjames
  */
 class ElasticFactory {
-
-	private ?Indexer $indexer = null;
-
-	/**
-	 * @since 3.2
-	 */
-	public function newHooks(): Hooks {
-		return new Hooks( $this );
-	}
 
 	/**
 	 * @since 3.0
@@ -109,7 +102,7 @@ class ElasticFactory {
 		);
 
 		$connectionProvider->setLogger(
-			$applicationFactory->getMediaWikiLogger( 'smw-elastic' )
+			LoggerFactory::getInstance( 'smw-elastic' )
 		);
 
 		return $connectionProvider;
@@ -156,14 +149,17 @@ class ElasticFactory {
 		$applicationFactory = ApplicationFactory::getInstance();
 
 		if ( $store === null ) {
-			$store = $applicationFactory->getStore();
+			$store = ApplicationFactory::getInstance()->getStore();
 		}
 
 		$connection = $store->getConnection( 'elastic' );
+		$mwServices = MediaWikiServices::getInstance();
 
 		$indexer = new Indexer(
 			$store,
-			$this->newBulk( $connection )
+			$this->newBulk( $connection ),
+			$mwServices->getTitleFactory(),
+			$mwServices->getRevisionLookup()
 		);
 
 		if ( $messageReporter === null ) {
@@ -171,7 +167,7 @@ class ElasticFactory {
 		}
 
 		$indexer->setLogger(
-			$applicationFactory->getMediaWikiLogger( 'smw-elastic' )
+			LoggerFactory::getInstance( 'smw-elastic' )
 		);
 
 		$indexer->setRevisionGuard(
@@ -205,7 +201,7 @@ class ElasticFactory {
 	public function newFileIndexer( Store $store, Indexer $indexer ): FileIndexer {
 		$applicationFactory = ApplicationFactory::getInstance();
 
-		$logger = $applicationFactory->getMediaWikiLogger( 'smw-elastic' );
+		$logger = LoggerFactory::getInstance( 'smw-elastic' );
 		$connection = $store->getConnection( 'elastic' );
 
 		// Don't use the `ElasticStore` instance otherwise we index fields
@@ -222,7 +218,7 @@ class ElasticFactory {
 		);
 
 		$fileHandler = new FileHandler(
-			$applicationFactory->create( 'FileRepoFinder' )
+			MediaWikiServices::getInstance()->getRepoGroup()
 		);
 
 		$fileHandler->setLogger(
@@ -260,10 +256,8 @@ class ElasticFactory {
 	public function newDocumentReplicationExaminer(
 		?Store $store = null
 	): DocumentReplicationExaminer {
-		$applicationFactory = ApplicationFactory::getInstance();
-
 		if ( $store === null ) {
-			$store = $applicationFactory->getStore();
+			$store = ApplicationFactory::getInstance()->getStore();
 		}
 
 		$documentReplicationExaminer = new DocumentReplicationExaminer(
@@ -281,7 +275,7 @@ class ElasticFactory {
 		$applicationFactory = ApplicationFactory::getInstance();
 
 		if ( $store === null ) {
-			$store = $applicationFactory->getStore();
+			$store = ApplicationFactory::getInstance()->getStore();
 		}
 
 		$connection = $store->getConnection( 'elastic' );
@@ -290,7 +284,8 @@ class ElasticFactory {
 		$replicationCheck = new ReplicationCheck(
 			$store,
 			$this->newDocumentReplicationExaminer( $store ),
-			$applicationFactory->getEntityCache()
+			$applicationFactory->getEntityCache(),
+			new TemplateParser( __DIR__ . '/../../templates/EntityExaminer' )
 		);
 
 		$replicationCheck->setCacheTTL(
@@ -341,11 +336,12 @@ class ElasticFactory {
 		$queryEngine = new QueryEngine(
 			$store,
 			$conditionBuilder,
+			$applicationFactory->getQueryFactory(),
 			$config
 		);
 
 		$queryEngine->setLogger(
-			$applicationFactory->getMediaWikiLogger( 'smw-elastic' )
+			LoggerFactory::getInstance( 'smw-elastic' )
 		);
 
 		return $queryEngine;
@@ -486,25 +482,9 @@ class ElasticFactory {
 	}
 
 	/**
-	 * @see https://www.semantic-mediawiki.org/wiki/Hooks#SMW::SQLStore::EntityReferenceCleanUpComplete
-	 * @since 3.0
-	 */
-	public function onEntityReferenceCleanUpComplete( Store $store, $id, $subject, $isRedirect ): bool {
-		if ( !$store instanceof ElasticStore || $store->getConnection( 'elastic' ) instanceof DummyClient ) {
-			return true;
-		}
-
-		if ( $this->indexer === null ) {
-			$this->indexer = $this->newIndexer( $store );
-		}
-
-		$this->indexer->setOrigin( __METHOD__ );
-		$this->indexer->delete( [ $id ] );
-
-		return true;
-	}
-
-	/**
+	 * Callback dispatched through the SMW event system (registered by
+	 * `SMW\Elastic\Hooks\RegisterEventListeners`), not as a MediaWiki hook.
+	 *
 	 * @since 3.1
 	 *
 	 * @param DispatchContext $dispatchContext
@@ -528,46 +508,6 @@ class ElasticFactory {
 
 		$replicationCheck->deleteReplicationTrail(
 			$subject
-		);
-
-		return true;
-	}
-
-	/**
-	 * @see https://www.semantic-mediawiki.org/wiki/Hooks#SMW::Event::RegisterEventListeners
-	 * @since 3.1
-	 */
-	public function onRegisterEventListeners( $eventListener ): bool {
-		$eventListener->registerCallback( 'InvalidateEntityCache', [ $this, 'onInvalidateEntityCache' ] );
-
-		return true;
-	}
-
-	/**
-	 * @see https://www.semantic-mediawiki.org/wiki/Hooks#SMW::Maintenance::AfterUpdateEntityCollationComplete
-	 * @since 3.1
-	 */
-	public function onAfterUpdateEntityCollationComplete( $store, MessageReporter $messageReporter ): bool {
-		$connection = $store->getConnection( 'elastic' );
-		if ( $connection === null || $connection instanceof DummyClient ) {
-			return true;
-		}
-
-		$rebuilder = $this->newRebuilder(
-			$store
-		);
-
-		$rebuilder->setMessageReporter(
-			$messageReporter
-		);
-
-		$updateEntityCollationComplete = $this->newUpdateEntityCollationComplete(
-			$store,
-			$messageReporter
-		);
-
-		$updateEntityCollationComplete->runUpdate(
-			$rebuilder
 		);
 
 		return true;

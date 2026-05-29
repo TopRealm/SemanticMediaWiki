@@ -3,10 +3,12 @@
 namespace SMW\MediaWiki\Api\Browse;
 
 use Exception;
+use MediaWiki\MediaWikiServices;
 use SMW\DataItems\WikiPage;
 use SMW\Exception\ParameterNotFoundException;
 use SMW\Exception\RedirectTargetUnresolvableException;
 use SMW\MediaWiki\Specials\Browse\HtmlBuilder;
+use SMW\MediaWiki\Specials\Browse\ValueFormatter;
 use SMW\Services\ServicesFactory as ApplicationFactory;
 use SMW\Store;
 
@@ -84,7 +86,8 @@ class SubjectLookup extends Lookup {
 
 		$htmlBuilder = new HtmlBuilder(
 			$this->store,
-			$subject
+			$subject,
+			new ValueFormatter( $this->store )
 		);
 
 		$htmlBuilder->setOptions(
@@ -98,7 +101,7 @@ class SubjectLookup extends Lookup {
 		$applicationFactory = ApplicationFactory::getInstance();
 		$subobject = $params['subobject'] ?? '';
 
-		$title = $applicationFactory->newTitleFactory()->newFromText(
+		$title = MediaWikiServices::getInstance()->getTitleFactory()->newFromText(
 			$params['subject'],
 			$params['ns']
 		);

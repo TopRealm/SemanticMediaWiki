@@ -2,15 +2,20 @@
 
 namespace SMW\MediaWiki\Specials;
 
+use MediaWiki\HookContainer\HookContainer;
 use MediaWiki\SpecialPage\SpecialPage;
 use PermissionsError;
 use SMW\Localizer\Message;
+use SMW\MediaWiki\JobFactory;
+use SMW\MediaWiki\JobQueue;
 use SMW\MediaWiki\Specials\Admin\OutputFormatter;
 use SMW\MediaWiki\Specials\Admin\TaskHandler;
 use SMW\MediaWiki\Specials\Admin\TaskHandlerFactory;
 use SMW\MediaWiki\Specials\Admin\TaskHandlerRegistry;
 use SMW\Services\ServicesFactory as ApplicationFactory;
+use SMW\Settings;
 use SMW\SQLStore\SQLStore;
+use SMW\Store;
 use SMW\Utils\HtmlTabs;
 
 /**
@@ -29,7 +34,16 @@ use SMW\Utils\HtmlTabs;
  */
 class SpecialAdmin extends SpecialPage {
 
-	public function __construct() {
+	/**
+	 * @since 7.0.0
+	 */
+	public function __construct(
+		private readonly Store $store,
+		private readonly Settings $settings,
+		private readonly HookContainer $hookContainer,
+		private readonly JobFactory $jobFactory,
+		private readonly JobQueue $jobQueue
+	) {
 		parent::__construct( 'SMWAdmin', 'smw-admin' );
 	}
 
@@ -67,8 +81,10 @@ class SpecialAdmin extends SpecialPage {
 		] );
 		$output->addModules( 'ext.smw.admin' );
 
-		$applicationFactory = ApplicationFactory::getInstance();
-		$mwCollaboratorFactory = $applicationFactory->newMwCollaboratorFactory();
+		// Partial DI: MwCollaboratorFactory is still resolved through
+		// ApplicationFactory because it is not registered as a global SMW.X
+		// service.
+		$mwCollaboratorFactory = ApplicationFactory::getInstance()->newMwCollaboratorFactory();
 
 		$htmlFormRenderer = $mwCollaboratorFactory->newHtmlFormRenderer(
 			$this->getContext()->getTitle(),
@@ -76,31 +92,35 @@ class SpecialAdmin extends SpecialPage {
 		);
 
 		// Some functions require methods only provided by the SQLStore (or any
-		// inherit class thereof)
-		$store = $applicationFactory->getStore();
-		if ( !is_a( $store, SQLStore::class ) ) {
-			$store = $applicationFactory->getStore( SQLStore::class );
-		}
+		// inherit class thereof). When the injected default Store is not an
+		// SQLStore (e.g. SPARQLStore) the admin tasks need a separately-built
+		// SQL store; resolving it through ApplicationFactory mirrors the
+		// partial-DI pattern used by SpecialPropertyLabelSimilarity.
+		$store = $this->store instanceof SQLStore
+			? $this->store
+			: ApplicationFactory::getInstance()->getStore( SQLStore::class );
 
 		$outputFormatter = new OutputFormatter(
 			$this->getOutput()
 		);
 
-		$adminFeatures = $applicationFactory->getSettings()->get( 'smwgAdminFeatures' );
+		$adminFeatures = $this->settings->get( 'smwgAdminFeatures' );
 
 		// Disable the feature in case the function is not supported
-		if ( $applicationFactory->getSettings()->get( 'smwgEnabledFulltextSearch' ) === false ) {
+		if ( $this->settings->get( 'smwgEnabledFulltextSearch' ) === false ) {
 			$adminFeatures &= ~SMW_ADM_FULLT;
 		}
 
 		$taskHandlerFactory = new TaskHandlerFactory(
 			$store,
 			$htmlFormRenderer,
-			$outputFormatter
+			$outputFormatter,
+			$this->jobFactory,
+			$this->jobQueue
 		);
 
-		$taskHandlerFactory->setHookDispatcher(
-			$applicationFactory->getHookDispatcher()
+		$taskHandlerFactory->setHookContainer(
+			$this->hookContainer
 		);
 
 		$taskHandlerRegistry = $taskHandlerFactory->newTaskHandlerRegistry(
@@ -156,7 +176,7 @@ class SpecialAdmin extends SpecialPage {
 		$supportTaskList = $taskHandlerRegistry->get( TaskHandler::SECTION_SUPPORT );
 		$supportTask = end( $supportTaskList );
 
-		$default = $alertsSection === '' ? ( $supportTask->isEnabledFeature( SMW_ADM_SHOW_OVERVIEW ) ? 'general' : 'maintenance' ) : 'alerts';
+		$default = $alertsSection === '' ? ( $supportTask->hasFeature( SMW_ADM_SHOW_OVERVIEW ) ? 'general' : 'maintenance' ) : 'alerts';
 
 		// If we want to remain on a specific tab on a GET request, use the `tab`
 		// parameter since we are unable to fetch any #href hash from a request
@@ -174,7 +194,7 @@ class SpecialAdmin extends SpecialPage {
 		);
 
 		$supportSection = '';
-		if ( $supportTask->isEnabledFeature( SMW_ADM_SHOW_OVERVIEW ) ) {
+		if ( $supportTask->hasFeature( SMW_ADM_SHOW_OVERVIEW ) ) {
 			$supportSection = $supportTask->getHtml();
 			$htmlTabs->tab( 'general', $this->msg_text( 'smw-admin-tab-general' ) );
 		}
@@ -182,7 +202,7 @@ class SpecialAdmin extends SpecialPage {
 		$htmlTabs->tab( 'maintenance', $this->msg_text( 'smw-admin-tab-maintenance' ) );
 		$htmlTabs->tab( 'supplement', $this->msg_text( 'smw-admin-tab-supplement' ) );
 
-		if ( $supportTask->isEnabledFeature( SMW_ADM_SHOW_OVERVIEW ) ) {
+		if ( $supportTask->hasFeature( SMW_ADM_SHOW_OVERVIEW ) ) {
 			$htmlTabs->content( 'general', $supportSection );
 		}
 

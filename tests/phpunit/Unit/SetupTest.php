@@ -2,11 +2,10 @@
 
 namespace SMW\Tests\Unit;
 
+use MediaWiki\HookContainer\HookContainer;
 use MediaWiki\Language\Language;
 use PHPUnit\Framework\TestCase;
-use SMW\MediaWiki\HookDispatcher;
 use SMW\Setup;
-use SMW\Store;
 use SMW\Tests\TestEnvironment;
 
 /**
@@ -22,26 +21,14 @@ class SetupTest extends TestCase {
 
 	private $testEnvironment;
 	private $defaultConfig;
-	private $hookDispatcher;
+	private $hookContainer;
 
 	protected function setUp(): void {
 		parent::setUp();
 
-		$this->hookDispatcher = $this->getMockBuilder( HookDispatcher::class )
+		$this->hookContainer = $this->getMockBuilder( HookContainer::class )
 			->disableOriginalConstructor()
 			->getMock();
-
-		$store = $this->getMockBuilder( Store::class )
-			->disableOriginalConstructor()
-			->getMockForAbstractClass();
-
-		$store->expects( $this->any() )
-			->method( 'getProperties' )
-			->willReturn( [] );
-
-		$store->expects( $this->any() )
-			->method( 'getInProperties' )
-			->willReturn( [] );
 
 		$language = $this->getMockBuilder( Language::class )
 			->disableOriginalConstructor()
@@ -65,7 +52,6 @@ class SetupTest extends TestCase {
 		];
 
 		$this->testEnvironment = new TestEnvironment( $this->defaultConfig );
-		$this->testEnvironment->registerObject( 'Store', $store );
 	}
 
 	protected function tearDown(): void {
@@ -105,15 +91,16 @@ class SetupTest extends TestCase {
 	}
 
 	public function testHookRunOnSetupAfterInitializationComplete() {
-		$this->hookDispatcher->expects( $this->once() )
-			->method( 'onSetupAfterInitializationComplete' );
+		$this->hookContainer->expects( $this->once() )
+			->method( 'run' )
+			->with( 'SMW::Setup::AfterInitializationComplete', $this->isType( 'array' ) );
 
 		$config = $this->defaultConfig;
 
 		$instance = new Setup();
 
-		$instance->setHookDispatcher(
-			$this->hookDispatcher
+		$instance->setHookContainer(
+			$this->hookContainer
 		);
 
 		$instance->init( $config, '' );
@@ -130,8 +117,8 @@ class SetupTest extends TestCase {
 
 		$instance = new Setup();
 
-		$instance->setHookDispatcher(
-			$this->hookDispatcher
+		$instance->setHookContainer(
+			$this->hookContainer
 		);
 
 		$config = $instance->init( $config, 'Foo' );
@@ -148,8 +135,8 @@ class SetupTest extends TestCase {
 
 		$instance = new Setup();
 
-		$instance->setHookDispatcher(
-			$this->hookDispatcher
+		$instance->setHookContainer(
+			$this->hookContainer
 		);
 
 		$config = $instance->init( $config, 'Foo' );

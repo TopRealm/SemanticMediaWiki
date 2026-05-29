@@ -224,13 +224,6 @@ class PropertyRegistry {
 	}
 
 	/**
-	 * @deprecated since 3.0, use PropertyRegistry::registerPropertyDescriptionByMsgKey
-	 */
-	public function registerPropertyDescriptionMsgKeyById( $id, $msgKey ): void {
-		$this->registerPropertyDescriptionByMsgKey( $id, $msgKey );
-	}
-
-	/**
 	 * @since 2.5
 	 *
 	 * @param string $id
@@ -314,13 +307,6 @@ class PropertyRegistry {
 	}
 
 	/**
-	 * @deprecated since 3.0, use PropertyRegistry::getPropertyValueTypeById instead
-	 */
-	public function getPropertyTypeId( $id ) {
-		return $this->getPropertyValueTypeById( $id );
-	}
-
-	/**
 	 * Find and return the ID for the pre-defined property of the given
 	 * local label. If the label does not belong to a pre-defined property,
 	 * return false.
@@ -385,23 +371,16 @@ class PropertyRegistry {
 	 * @since 2.5
 	 *
 	 * @param string $id
-	 * @param string|null $languageCode
+	 * @param string|null|false $languageCode
 	 *
 	 * @return string
 	 */
 	public function findPreferredPropertyLabelFromIdByLanguageCode( $id, $languageCode = '' ) {
-		if ( $languageCode === false || $languageCode === '' ) {
+		if ( !$languageCode ) {
 			$languageCode = Localizer::getInstance()->getUserLanguage()->getCode();
 		}
 
 		return $this->propertyLabelFinder->findPreferredPropertyLabelByLanguageCode( $id, $languageCode );
-	}
-
-	/**
-	 * @deprecated since 3.0 use isRegistered instead
-	 */
-	public function isKnownPropertyId( $id ): bool {
-		return $this->isRegistered( $id );
 	}
 
 	/**

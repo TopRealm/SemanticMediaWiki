@@ -2,8 +2,10 @@
 
 namespace SMW\MediaWiki\Specials\Admin;
 
+use MediaWiki\HookContainer\HookContainer;
 use MediaWiki\User\User;
-use SMW\MediaWiki\HookDispatcherAwareTrait;
+use SMW\MediaWiki\JobFactory;
+use SMW\MediaWiki\JobQueue;
 use SMW\MediaWiki\Renderer\HtmlFormRenderer;
 use SMW\MediaWiki\Specials\Admin\Alerts\ByNamespaceInvalidEntitiesMaintenanceAlertTaskHandler;
 use SMW\MediaWiki\Specials\Admin\Alerts\DeprecationNoticeTaskHandler;
@@ -34,7 +36,7 @@ use SMW\Utils\FileFetcher;
  */
 class TaskHandlerFactory {
 
-	use HookDispatcherAwareTrait;
+	private ?HookContainer $hookContainer = null;
 
 	/**
 	 * @since 2.5
@@ -43,7 +45,16 @@ class TaskHandlerFactory {
 		private Store $store,
 		private HtmlFormRenderer $htmlFormRenderer,
 		private OutputFormatter $outputFormatter,
+		private readonly JobFactory $jobFactory,
+		private readonly JobQueue $jobQueue,
 	) {
+	}
+
+	/**
+	 * @since 7.0.0
+	 */
+	public function setHookContainer( HookContainer $hookContainer ): void {
+		$this->hookContainer = $hookContainer;
 	}
 
 	/**
@@ -60,8 +71,8 @@ class TaskHandlerFactory {
 			$this->outputFormatter
 		);
 
-		$taskHandlerRegistry->setHookDispatcher(
-			$this->hookDispatcher
+		$taskHandlerRegistry->setHookContainer(
+			$this->hookContainer
 		);
 
 		$taskHandlerRegistry->setFeatureSet(
@@ -210,7 +221,12 @@ class TaskHandlerFactory {
 	 * @return DataRefreshJobTaskHandler
 	 */
 	public function newDataRefreshJobTaskHandler(): DataRefreshJobTaskHandler {
-		return new DataRefreshJobTaskHandler( $this->htmlFormRenderer, $this->outputFormatter );
+		return new DataRefreshJobTaskHandler(
+			$this->htmlFormRenderer,
+			$this->outputFormatter,
+			$this->jobFactory,
+			$this->jobQueue
+		);
 	}
 
 	/**
@@ -219,7 +235,12 @@ class TaskHandlerFactory {
 	 * @return DisposeJobTaskHandler
 	 */
 	public function newDisposeJobTaskHandler(): DisposeJobTaskHandler {
-		return new DisposeJobTaskHandler( $this->htmlFormRenderer, $this->outputFormatter );
+		return new DisposeJobTaskHandler(
+			$this->htmlFormRenderer,
+			$this->outputFormatter,
+			$this->jobFactory,
+			$this->jobQueue
+		);
 	}
 
 	/**
@@ -228,7 +249,12 @@ class TaskHandlerFactory {
 	 * @return PropertyStatsRebuildJobTaskHandler
 	 */
 	public function newPropertyStatsRebuildJobTaskHandler(): PropertyStatsRebuildJobTaskHandler {
-		return new PropertyStatsRebuildJobTaskHandler( $this->htmlFormRenderer, $this->outputFormatter );
+		return new PropertyStatsRebuildJobTaskHandler(
+			$this->htmlFormRenderer,
+			$this->outputFormatter,
+			$this->jobFactory,
+			$this->jobQueue
+		);
 	}
 
 	/**
@@ -237,7 +263,12 @@ class TaskHandlerFactory {
 	 * @return FulltextSearchTableRebuildJobTaskHandler
 	 */
 	public function newFulltextSearchTableRebuildJobTaskHandler(): FulltextSearchTableRebuildJobTaskHandler {
-		return new FulltextSearchTableRebuildJobTaskHandler( $this->htmlFormRenderer, $this->outputFormatter );
+		return new FulltextSearchTableRebuildJobTaskHandler(
+			$this->htmlFormRenderer,
+			$this->outputFormatter,
+			$this->jobFactory,
+			$this->jobQueue
+		);
 	}
 
 	/**

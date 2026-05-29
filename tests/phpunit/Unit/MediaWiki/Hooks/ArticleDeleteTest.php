@@ -2,13 +2,16 @@
 
 namespace SMW\Tests\Unit\MediaWiki\Hooks;
 
-use Onoi\EventDispatcher\EventDispatcher;
 use PHPUnit\Framework\TestCase;
 use SMW\DataItems\Property;
 use SMW\DataItems\WikiPage;
+use SMW\EventDispatcher\EventDispatcher;
 use SMW\MediaWiki\Hooks\ArticleDelete;
 use SMW\MediaWiki\JobFactory;
 use SMW\MediaWiki\Jobs\UpdateDispatcherJob;
+use SMW\SerializerFactory;
+use SMW\Serializers\SemanticDataSerializer;
+use SMW\Services\ServicesFactory as ApplicationFactory;
 use SMW\SQLStore\EntityStore\EntityIdManager;
 use SMW\SQLStore\SQLStore;
 use SMW\Store;
@@ -28,6 +31,8 @@ class ArticleDeleteTest extends TestCase {
 	private $testEnvironment;
 	private $jobFactory;
 	private $eventDispatcher;
+	private $serializerFactory;
+	private $servicesFactory;
 
 	protected function setUp(): void {
 		parent::setUp();
@@ -43,16 +48,18 @@ class ArticleDeleteTest extends TestCase {
 			->disableOriginalConstructor()
 			->getMock();
 
-		$jobQueue = $this->getMockBuilder( '\SMW\MediaWiki\JobQueue' )
-			->disableOriginalConstructor()
-			->getMock();
-
-		$this->testEnvironment->registerObject( 'JobFactory', $this->jobFactory );
-		$this->testEnvironment->registerObject( 'JobQueue', $jobQueue );
-
 		$this->eventDispatcher = $this->getMockBuilder( EventDispatcher::class )
 			->disableOriginalConstructor()
 			->getMock();
+
+		$semanticDataSerializer = $this->createMock( SemanticDataSerializer::class );
+		$semanticDataSerializer->method( 'serialize' )->willReturn( [] );
+
+		$this->serializerFactory = $this->createMock( SerializerFactory::class );
+		$this->serializerFactory->method( 'newSemanticDataSerializer' )
+			->willReturn( $semanticDataSerializer );
+
+		$this->servicesFactory = ApplicationFactory::getInstance();
 	}
 
 	protected function tearDown(): void {
@@ -65,7 +72,7 @@ class ArticleDeleteTest extends TestCase {
 			->disableOriginalConstructor()
 			->getMockForAbstractClass();
 
-		$instance = new ArticleDelete( $store );
+		$instance = new ArticleDelete( $store, $this->jobFactory, $this->eventDispatcher, $this->serializerFactory, $this->servicesFactory );
 
 		$this->assertInstanceOf(
 			ArticleDelete::class,
@@ -110,16 +117,14 @@ class ArticleDeleteTest extends TestCase {
 				[ $this->equalTo( 'InvalidateEntityCache' ) ] );
 
 		$instance = new ArticleDelete(
-			$store
+			$store,
+			$this->jobFactory,
+			$this->eventDispatcher,
+			$this->serializerFactory,
+			$this->servicesFactory
 		);
 
-		$instance->setEventDispatcher(
-			$this->eventDispatcher
-		);
-
-		$this->assertTrue(
-			$instance->process( $subject->getTitle() )
-		);
+		$instance->doDelete( $subject->getTitle() );
 	}
 
 }

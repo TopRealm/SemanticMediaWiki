@@ -3,17 +3,20 @@
 namespace SMW\Tests\Unit\MediaWiki\Hooks;
 
 use MediaWiki\Parser\ParserOutput;
+use MediaWiki\Revision\RevisionRecord;
 use MediaWiki\Title\Title;
+use MediaWiki\User\User;
 use PHPUnit\Framework\TestCase;
 use SMW\DataItemFactory;
 use SMW\Localizer\Message;
 use SMW\MediaWiki\EditInfo;
 use SMW\MediaWiki\Hooks\ArticleProtectComplete;
+use SMW\MediaWiki\MwCollaboratorFactory;
+use SMW\MediaWiki\RevisionGuard;
 use SMW\Property\Annotators\EditProtectedPropertyAnnotator;
-use SMW\Property\SpecificationLookup;
-use SMW\SQLStore\SQLStore;
-use SMW\Store;
+use SMW\Settings;
 use SMW\Tests\TestEnvironment;
+use WikiPage;
 
 /**
  * @covers \SMW\MediaWiki\Hooks\ArticleProtectComplete
@@ -28,46 +31,30 @@ class ArticleProtectCompleteTest extends TestCase {
 
 	private $spyLogger;
 	private $testEnvironment;
-	private $semanticDataFactory;
+	private $settings;
+	private $mwCollaboratorFactory;
+	private $revisionGuard;
 	private $dataItemFactory;
 	private $editInfo;
+	private $semanticDataFactory;
 
 	protected function setUp(): void {
 		parent::setUp();
 
 		$this->testEnvironment = new TestEnvironment();
 		$this->dataItemFactory = new DataItemFactory();
-
-		$this->spyLogger = $this->testEnvironment->getUtilityFactory()->newSpyLogger();
 		$this->semanticDataFactory = $this->testEnvironment->getUtilityFactory()->newSemanticDataFactory();
+		$this->spyLogger = $this->testEnvironment->getUtilityFactory()->newSpyLogger();
 
-		$propertySpecificationLookup = $this->getMockBuilder( SpecificationLookup::class )
-			->disableOriginalConstructor()
-			->getMock();
+		$this->settings = $this->createMock( Settings::class );
 
-		$store = $this->getMockBuilder( Store::class )
-			->disableOriginalConstructor()
-			->getMockForAbstractClass();
+		$this->editInfo = $this->createMock( EditInfo::class );
 
-		$idTable = $this->getMockBuilder( '\stdClass' )
-			->setMethods( [ 'exists', 'findAssociatedRev' ] )
-			->getMock();
+		$this->mwCollaboratorFactory = $this->createMock( MwCollaboratorFactory::class );
+		$this->mwCollaboratorFactory->method( 'newEditInfo' )->willReturn( $this->editInfo );
 
-		$store = $this->getMockBuilder( SQLStore::class )
-			->disableOriginalConstructor()
-			->setMethods( [ 'getObjectIds' ] )
-			->getMock();
-
-		$store->expects( $this->any() )
-			->method( 'getObjectIds' )
-			->willReturn( $idTable );
-
-		$this->testEnvironment->registerObject( 'Store', $store );
-		$this->testEnvironment->registerObject( 'PropertySpecificationLookup', $propertySpecificationLookup );
-
-		$this->editInfo = $this->getMockBuilder( EditInfo::class )
-			->disableOriginalConstructor()
-			->getMock();
+		$this->revisionGuard = $this->createMock( RevisionGuard::class );
+		$this->revisionGuard->method( 'newRevisionFromPage' )->willReturn( $this->createMock( RevisionRecord::class ) );
 	}
 
 	protected function tearDown(): void {
@@ -75,33 +62,33 @@ class ArticleProtectCompleteTest extends TestCase {
 		parent::tearDown();
 	}
 
-	public function testCanConstruct() {
-		$title = $this->getMockBuilder( Title::class )
-			->disableOriginalConstructor()
-			->getMock();
+	private function newInstance(): ArticleProtectComplete {
+		return new ArticleProtectComplete(
+			$this->settings,
+			$this->spyLogger,
+			$this->mwCollaboratorFactory,
+			$this->revisionGuard,
+			$this->dataItemFactory
+		);
+	}
 
+	public function testCanConstruct() {
 		$this->assertInstanceOf(
 			ArticleProtectComplete::class,
-			new ArticleProtectComplete( $title, $this->editInfo )
+			$this->newInstance()
 		);
 	}
 
 	public function testProcessOnSelfInvokedReason() {
-		$title = $this->getMockBuilder( Title::class )
-			->disableOriginalConstructor()
-			->getMock();
-
-		$instance = new ArticleProtectComplete(
-			$title,
-			$this->editInfo
-		);
-
-		$instance->setLogger( $this->spyLogger );
+		$wikiPage = $this->createMock( WikiPage::class );
+		$user = $this->createMock( User::class );
 
 		$protections = [];
 		$reason = Message::get( 'smw-edit-protection-auto-update' );
 
-		$instance->process( $protections, $reason );
+		$this->assertTrue(
+			$this->newInstance()->onArticleProtectComplete( $wikiPage, $user, $protections, $reason )
+		);
 
 		$this->assertStringContainsString(
 			'No changes required, invoked by own process',
@@ -109,48 +96,53 @@ class ArticleProtectCompleteTest extends TestCase {
 		);
 	}
 
+	public function testProcessOnMissingParserOutput() {
+		$this->editInfo->expects( $this->once() )
+			->method( 'getOutput' )
+			->willReturn( null );
+
+		$wikiPage = $this->createMock( WikiPage::class );
+		$user = $this->createMock( User::class );
+
+		$this->assertTrue(
+			$this->newInstance()->onArticleProtectComplete( $wikiPage, $user, [ 'edit' => 'sysop' ], 'foo' )
+		);
+
+		$this->assertStringContainsString(
+			'Missing ParserOutput',
+			$this->spyLogger->getMessagesAsString()
+		);
+	}
+
 	public function testProcessOnMatchableEditProtectionToAddAnnotation() {
-		$parserOutput = $this->getMockBuilder( ParserOutput::class )
-			->disableOriginalConstructor()
-			->getMock();
+		$semanticData = $this->semanticDataFactory->newEmptySemanticData(
+			$this->dataItemFactory->newDIWikiPage( __METHOD__, NS_SPECIAL )
+		);
 
-		$title = $this->getMockBuilder( Title::class )
-			->disableOriginalConstructor()
-			->getMock();
+		$parserOutput = $this->createMock( ParserOutput::class );
+		$parserOutput->method( 'getExtensionData' )->willReturn( $semanticData );
 
-		$title->expects( $this->any() )
-			->method( 'getDBKey' )
-			->willReturn( 'Foo' );
+		$title = $this->createMock( Title::class );
+		$title->method( 'getDBKey' )->willReturn( 'Foo' );
+		$title->method( 'getNamespace' )->willReturn( NS_SPECIAL );
+		$title->method( 'getLatestRevID' )->willReturn( 9900 );
 
-		$title->expects( $this->any() )
-			->method( 'getNamespace' )
-			->willReturn( NS_SPECIAL );
+		$wikiPage = $this->createMock( WikiPage::class );
+		$wikiPage->method( 'getTitle' )->willReturn( $title );
 
-		$title->expects( $this->any() )
-			->method( 'getLatestRevID' )
-			->willReturn( 9900 );
+		$user = $this->createMock( User::class );
 
 		$this->editInfo->expects( $this->once() )
 			->method( 'getOutput' )
 			->willReturn( $parserOutput );
 
-		$instance = new ArticleProtectComplete(
-			$title,
-			$this->editInfo
-		);
-
-		$instance->setLogger( $this->spyLogger );
-
-		$instance->setOptions(
-			[
-				'smwgEditProtectionRight' => 'Foo'
-			]
-		);
+		$this->settings->method( 'get' )
+			->with( 'smwgEditProtectionRight' )
+			->willReturn( 'Foo' );
 
 		$protections = [ 'edit' => 'Foo' ];
-		$reason = '';
 
-		$instance->process( $protections, $reason );
+		$this->newInstance()->onArticleProtectComplete( $wikiPage, $user, $protections, '' );
 
 		$this->assertStringContainsString(
 			'ArticleProtectComplete addProperty `Is edit protected`',
@@ -171,51 +163,30 @@ class ArticleProtectCompleteTest extends TestCase {
 			$dataItem
 		);
 
-		$parserOutput = $this->getMockBuilder( ParserOutput::class )
-			->disableOriginalConstructor()
-			->getMock();
+		$parserOutput = $this->createMock( ParserOutput::class );
+		$parserOutput->method( 'getExtensionData' )->willReturn( $semanticData );
 
-		$parserOutput->expects( $this->once() )
-			->method( 'getExtensionData' )
-			->willReturn( $semanticData );
+		$title = $this->createMock( Title::class );
+		$title->method( 'getDBKey' )->willReturn( 'Foo' );
+		$title->method( 'getNamespace' )->willReturn( NS_SPECIAL );
+		$title->method( 'getLatestRevID' )->willReturn( 9901 );
 
-		$title = $this->getMockBuilder( Title::class )
-			->disableOriginalConstructor()
-			->getMock();
+		$wikiPage = $this->createMock( WikiPage::class );
+		$wikiPage->method( 'getTitle' )->willReturn( $title );
 
-		$title->expects( $this->any() )
-			->method( 'getDBKey' )
-			->willReturn( 'Foo' );
-
-		$title->expects( $this->any() )
-			->method( 'getLatestRevID' )
-			->willReturn( 9901 );
-
-		$title->expects( $this->any() )
-			->method( 'getNamespace' )
-			->willReturn( NS_SPECIAL );
+		$user = $this->createMock( User::class );
 
 		$this->editInfo->expects( $this->once() )
 			->method( 'getOutput' )
 			->willReturn( $parserOutput );
 
-		$instance = new ArticleProtectComplete(
-			$title,
-			$this->editInfo
-		);
-
-		$instance->setLogger( $this->spyLogger );
-
-		$instance->setOptions(
-			[
-				'smwgEditProtectionRight' => 'Foo2'
-			]
-		);
+		$this->settings->method( 'get' )
+			->with( 'smwgEditProtectionRight' )
+			->willReturn( 'Foo2' );
 
 		$protections = [ 'edit' => 'Foo' ];
-		$reason = '';
 
-		$instance->process( $protections, $reason );
+		$this->newInstance()->onArticleProtectComplete( $wikiPage, $user, $protections, '' );
 
 		$this->assertStringContainsString(
 			'ArticleProtectComplete removeProperty `Is edit protected`',

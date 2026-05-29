@@ -6,11 +6,11 @@ use MediaWiki\Context\RequestContext;
 use MediaWiki\Output\OutputPage;
 use MediaWiki\Request\FauxRequest;
 use PHPUnit\Framework\TestCase;
+use Skin;
 use SMW\Factbox\FactboxFactory;
 use SMW\Factbox\FactboxText;
 use SMW\MediaWiki\Hooks\SkinAfterContent;
 use SMW\Services\ServicesFactory as ApplicationFactory;
-use SMW\Settings;
 use SMW\Tests\Utils\Mock\MockTitle;
 
 /**
@@ -32,15 +32,6 @@ class SkinAfterContentTest extends TestCase {
 
 		$this->applicationFactory = ApplicationFactory::getInstance();
 
-		$settings = Settings::newFromArray( [
-			'smwgFactboxFeatures'  => SMW_FACTBOX_CACHE,
-			'smwgMainCacheType'        => 'hash',
-			'smwgShowFactboxEdit' => false,
-			'smwgShowFactbox' => false
-		] );
-
-		$this->applicationFactory->registerObject( 'Settings', $settings );
-
 		$this->factboxText = $this->applicationFactory->getFactboxText();
 	}
 
@@ -51,42 +42,49 @@ class SkinAfterContentTest extends TestCase {
 	}
 
 	public function testCanConstruct() {
-		$skin = $this->getMockBuilder( '\Skin' )
+		$factboxFactory = $this->getMockBuilder( FactboxFactory::class )
 			->disableOriginalConstructor()
 			->getMock();
 
 		$this->assertInstanceOf(
 			SkinAfterContent::class,
-			new SkinAfterContent( $skin )
+			new SkinAfterContent( $factboxFactory )
 		);
 	}
 
 	public function testTryToPerformUpdateOnNullSkin() {
 		$data = '';
-		$instance = new SkinAfterContent( null );
 
-		$instance->setOption( 'SMW_EXTENSION_LOADED', true );
+		$factboxFactory = $this->getMockBuilder( FactboxFactory::class )
+			->disableOriginalConstructor()
+			->getMock();
+
+		$factboxFactory->expects( $this->never() )
+			->method( 'newCachedFactbox' );
+
+		$instance = new SkinAfterContent( $factboxFactory );
 
 		$this->assertTrue(
-			$instance->performUpdate( $data )
+			$instance->onSkinAfterContent( $data, null )
 		);
+
+		$this->assertSame( '', $data );
 	}
 
 	/**
 	 * @dataProvider outputDataProvider
 	 */
 	public function testperformUpdateFactboxPresenterIntegration( $parameters, $expected ) {
+		if ( !defined( 'SMW_EXTENSION_LOADED' ) ) {
+			$this->markTestSkipped( 'SMW_EXTENSION_LOADED is not defined in this environment' );
+		}
+
 		$data = '';
 
 		$this->factboxText->setText( $parameters['text'] );
 
-		$instance = new SkinAfterContent( $parameters['skin'] );
-
-		$instance->setOption( 'SMW_EXTENSION_LOADED', true );
-
 		// Replace CachedFactbox instance
 		if ( isset( $parameters['title'] ) ) {
-
 			$cachedFactbox = $this->applicationFactory->create( 'FactboxFactory' )->newCachedFactbox();
 
 			$cachedFactbox->addContentToCache(
@@ -101,12 +99,14 @@ class SkinAfterContentTest extends TestCase {
 			$factboxFactory->expects( $this->once() )
 				->method( 'newCachedFactbox' )
 				->willReturn( $cachedFactbox );
-
-			$this->applicationFactory->registerObject( 'FactboxFactory', $factboxFactory );
+		} else {
+			$factboxFactory = $this->applicationFactory->getFactboxFactory();
 		}
 
+		$instance = new SkinAfterContent( $factboxFactory );
+
 		$this->assertTrue(
-			$instance->performUpdate( $data )
+			$instance->onSkinAfterContent( $data, $parameters['skin'] )
 		);
 
 		$this->assertEquals(
@@ -137,7 +137,7 @@ class SkinAfterContentTest extends TestCase {
 			->method( 'getTitle' )
 			->willReturn( $title );
 
-		$skin = $this->getMockBuilder( '\Skin' )
+		$skin = $this->getMockBuilder( Skin::class )
 			->disableOriginalConstructor()
 			->getMock();
 
@@ -189,7 +189,7 @@ class SkinAfterContentTest extends TestCase {
 
 		$text = __METHOD__ . 'text-1';
 
-		$skin = $this->getMockBuilder( '\Skin' )
+		$skin = $this->getMockBuilder( Skin::class )
 			->disableOriginalConstructor()
 			->getMock();
 
@@ -227,7 +227,7 @@ class SkinAfterContentTest extends TestCase {
 			->method( 'getTitle' )
 			->willReturn( $title );
 
-		$skin = $this->getMockBuilder( '\Skin' )
+		$skin = $this->getMockBuilder( Skin::class )
 			->disableOriginalConstructor()
 			->getMock();
 
@@ -235,7 +235,7 @@ class SkinAfterContentTest extends TestCase {
 			->method( 'getTitle' )
 			->willReturn( $title );
 
-		$skin->expects( $this->atLeastOnce() )
+		$skin->expects( $this->any() )
 			->method( 'getOutput' )
 			->willReturn( $outputPage );
 
@@ -269,7 +269,7 @@ class SkinAfterContentTest extends TestCase {
 			->method( 'getTitle' )
 			->willReturn( $title );
 
-		$skin = $this->getMockBuilder( '\Skin' )
+		$skin = $this->getMockBuilder( Skin::class )
 			->disableOriginalConstructor()
 			->getMock();
 
@@ -306,7 +306,7 @@ class SkinAfterContentTest extends TestCase {
 			->method( 'getTitle' )
 			->willReturn( $title );
 
-		$skin = $this->getMockBuilder( '\Skin' )
+		$skin = $this->getMockBuilder( Skin::class )
 			->disableOriginalConstructor()
 			->getMock();
 
@@ -343,7 +343,7 @@ class SkinAfterContentTest extends TestCase {
 			->method( 'getTitle' )
 			->willReturn( $title );
 
-		$skin = $this->getMockBuilder( '\Skin' )
+		$skin = $this->getMockBuilder( Skin::class )
 			->disableOriginalConstructor()
 			->getMock();
 

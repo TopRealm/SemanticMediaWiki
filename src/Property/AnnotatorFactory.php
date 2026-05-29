@@ -4,6 +4,7 @@ namespace SMW\Property;
 
 use MediaWiki\Title\Title;
 use SMW\DataModel\SemanticData;
+use SMW\MediaWiki\PageCreator;
 use SMW\MediaWiki\RedirectTargetFinder;
 use SMW\PageInfo;
 use SMW\Property\Annotators\AttachmentLinkPropertyAnnotator;
@@ -19,6 +20,7 @@ use SMW\Property\Annotators\SortKeyPropertyAnnotator;
 use SMW\Property\Annotators\TranslationPropertyAnnotator;
 use SMW\Schema\Schema;
 use SMW\Services\ServicesFactory as ApplicationFactory;
+use SMW\Store;
 
 /**
  * @license GPL-2.0-or-later
@@ -27,6 +29,15 @@ use SMW\Services\ServicesFactory as ApplicationFactory;
  * @author mwjames
  */
 class AnnotatorFactory {
+
+	/**
+	 * @since 7.0.0
+	 */
+	public function __construct(
+		private readonly Store $store,
+		private readonly PageCreator $pageCreator,
+	) {
+	}
 
 	/**
 	 * @since 2.0
@@ -205,7 +216,9 @@ class AnnotatorFactory {
 
 		$categoryPropertyAnnotator = new CategoryPropertyAnnotator(
 			$propertyAnnotator,
-			$categories
+			$categories,
+			$this->store,
+			$this->pageCreator
 		);
 
 		$categoryPropertyAnnotator->showHiddenCategories(

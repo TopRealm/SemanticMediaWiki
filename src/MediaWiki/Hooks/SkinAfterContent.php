@@ -2,10 +2,9 @@
 
 namespace SMW\MediaWiki\Hooks;
 
+use MediaWiki\Hook\SkinAfterContentHook;
 use Skin;
-use SMW\MediaWiki\HookListener;
-use SMW\OptionsAwareTrait;
-use SMW\Services\ServicesFactory as ApplicationFactory;
+use SMW\Factbox\FactboxFactory;
 
 /**
  * SkinAfterContent hook to add text after the page content and
@@ -18,37 +17,31 @@ use SMW\Services\ServicesFactory as ApplicationFactory;
  *
  * @author mwjames
  */
-class SkinAfterContent implements HookListener {
-
-	use OptionsAwareTrait;
+class SkinAfterContent implements SkinAfterContentHook {
 
 	/**
-	 * @since  1.9
+	 * @since 7.0.0
 	 */
-	public function __construct( private ?Skin $skin = null ) {
+	public function __construct( private readonly FactboxFactory $factboxFactory ) {
 	}
 
 	/**
-	 * @since 1.9
-	 *
-	 * @param string &$data
-	 *
-	 * @return true
+	 * @since 7.0.0
 	 */
-	public function performUpdate( string &$data ): bool {
-		if ( $this->canAddFactbox() ) {
-			$this->addFactboxTo( $data );
+	public function onSkinAfterContent( &$data, $skin ) {
+		if ( $this->canAddFactbox( $skin ) ) {
+			$this->addFactboxTo( $skin, $data );
 		}
 
 		return true;
 	}
 
-	private function canAddFactbox(): bool {
-		if ( !$this->skin instanceof Skin || !$this->getOption( 'SMW_EXTENSION_LOADED' ) ) {
+	private function canAddFactbox( ?Skin $skin ): bool {
+		if ( !$skin instanceof Skin || !defined( 'SMW_EXTENSION_LOADED' ) ) {
 			return false;
 		}
 
-		$request = $this->skin->getContext()->getRequest();
+		$request = $skin->getContext()->getRequest();
 
 		if ( in_array( $request->getVal( 'action' ), [ 'delete', 'purge', 'protect', 'unprotect', 'history' ] ) ) {
 			return false;
@@ -57,11 +50,11 @@ class SkinAfterContent implements HookListener {
 		return true;
 	}
 
-	private function addFactboxTo( string &$data ): void {
-		$cachedFactbox = ApplicationFactory::getInstance()->singleton( 'FactboxFactory' )->newCachedFactbox();
+	private function addFactboxTo( Skin $skin, string &$data ): void {
+		$cachedFactbox = $this->factboxFactory->newCachedFactbox();
 
 		$data .= $cachedFactbox->retrieveContent(
-			$this->skin->getOutput()
+			$skin->getOutput()
 		);
 	}
 

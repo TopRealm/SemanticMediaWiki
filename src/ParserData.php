@@ -81,7 +81,7 @@ class ParserData {
 	/**
 	 * Identifies the origin of a request.
 	 *
-	 * @var string
+	 * @var string|array
 	 */
 	private $origin = '';
 
@@ -132,7 +132,7 @@ class ParserData {
 	/**
 	 * @since 2.5
 	 *
-	 * @param string $origin
+	 * @param string|array $origin
 	 */
 	public function setOrigin( $origin ): void {
 		$this->origin = $origin;
@@ -177,14 +177,26 @@ class ParserData {
 	/**
 	 * @since 3.0
 	 */
-	public function addExtraParserKey( $key ): void {
-		$keysToCache = ApplicationFactory::getInstance()->getSettings()->get( 'smwgSetParserCacheKeys' ) ?? [];
+	public function addExtraParserKey( string $key ): void {
+		// Preference keys fragment the parser cache by a user preference and are
+		// opt-in via $smwgSetParserCacheKeys. Every other key (functional markers
+		// such as `localTime` and `smwq`, or keys added by other extensions) is
+		// always applied.
+		$configurableKeys = [ 'userlang', 'dateformat' ];
 
-		if ( in_array( $key, $keysToCache ) ) {
-			// Looks odd in 1.30 "Saved in parser cache ... idhash:19989-0!canonical!userlang!dateformat!userlang!dateformat!userlang!dateformat!userlang!dateformat and ..."
-			// therefore use the ParserOutput::recordOption instead
-			$this->parserOutput->recordOption( $key );
-		} elseif ( $this->parserOptions !== null ) {
+		if ( in_array( $key, $configurableKeys, true ) ) {
+			$keysToCache = ApplicationFactory::getInstance()->getSettings()->get( 'smwgSetParserCacheKeys' ) ?? [];
+
+			if ( in_array( $key, $keysToCache, true ) ) {
+				// recordOption() marks the option as cache-relevant so MediaWiki
+				// hashes its actual value into the parser cache key.
+				$this->parserOutput->recordOption( $key );
+			}
+
+			return;
+		}
+
+		if ( $this->parserOptions !== null ) {
 			$this->parserOptions->addExtraKey( $key );
 		}
 	}
@@ -299,13 +311,6 @@ class ParserData {
 	}
 
 	/**
-	 * @deprecated since 3.0, use copyToParserOutput
-	 */
-	public function pushSemanticDataToParserOutput(): void {
-		$this->copyToParserOutput();
-	}
-
-	/**
 	 * @since 3.0
 	 */
 	public function markParserOutput(): void {
@@ -317,13 +322,6 @@ class ParserData {
 			'smw-semanticdata-status',
 			$this->semanticData->getProperties() !== []
 		);
-	}
-
-	/**
-	 * @deprecated since 3.0, use pushSemanticDataToParserOutput
-	 */
-	public function setSemanticDataStateToParserOutputProperty(): void {
-		$this->markParserOutput();
 	}
 
 	/**
@@ -377,8 +375,11 @@ class ParserData {
 			$dataUpdater->isSkippable( $this->title, $latestRevID ) ) {
 
 			$this->logger->info(
-				[ 'Update', 'Skipping update', 'Found revision', '{revID}' ],
-				[ 'role' => 'user', 'revID' => $latestRevID ]
+				'Update Skipping update Found revision {revID}',
+				[
+					'role' => 'user',
+					'revID' => $latestRevID
+				]
 			);
 
 			return false;

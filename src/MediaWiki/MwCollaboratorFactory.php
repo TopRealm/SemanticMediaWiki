@@ -4,19 +4,22 @@ namespace SMW\MediaWiki;
 
 use MediaWiki\Context\RequestContext;
 use MediaWiki\Language\Language;
+use MediaWiki\Logger\LoggerFactory;
+use MediaWiki\MediaWikiServices;
 use MediaWiki\Parser\Parser;
 use MediaWiki\Parser\StripState;
 use MediaWiki\Revision\RevisionRecord;
 use MediaWiki\Title\Title;
 use MediaWiki\User\User;
+use SMW\Connection\ConnectionProvider as IConnectionProvider;
 use SMW\MediaWiki\Connection\ConnectionProvider;
-use SMW\MediaWiki\Connection\LoadBalancerConnectionProvider;
 use SMW\MediaWiki\Renderer\HtmlColumnListRenderer;
 use SMW\MediaWiki\Renderer\HtmlFormRenderer;
 use SMW\MediaWiki\Renderer\HtmlTableRenderer;
 use SMW\MediaWiki\Renderer\HtmlTemplateRenderer;
 use SMW\MediaWiki\Renderer\WikitextTemplateRenderer;
 use SMW\Services\ServicesFactory as ApplicationFactory;
+use Wikimedia\Rdbms\IDatabase;
 use WikiPage;
 
 /**
@@ -31,17 +34,6 @@ class MwCollaboratorFactory {
 	 * @since 2.1
 	 */
 	public function __construct( private readonly ApplicationFactory $applicationFactory ) {
-	}
-
-	/**
-	 * @since 2.1
-	 *
-	 * @param Language|null $language
-	 *
-	 * @return MessageBuilder
-	 */
-	public function newMessageBuilder( ?Language $language = null ): MessageBuilder {
-		return new MessageBuilder( $language );
 	}
 
 	/**
@@ -81,12 +73,10 @@ class MwCollaboratorFactory {
 	 */
 	public function newHtmlFormRenderer( Title $title, ?Language $language = null ): HtmlFormRenderer {
 		if ( $language === null ) {
-			$language = $title->getPageLanguage();
+			$language = $title->getPageLanguage() ?? MediaWikiServices::getInstance()->getContentLanguage();
 		}
 
-		$messageBuilder = $this->newMessageBuilder( $language );
-
-		return new HtmlFormRenderer( $title, $messageBuilder );
+		return new HtmlFormRenderer( $title, $language );
 	}
 
 	/**
@@ -114,15 +104,27 @@ class MwCollaboratorFactory {
 	 * @param bool $asConnectionRef Deprecated parameter since 5.0
 	 *
 	 * @note The parameter $asConnectionRef is deprecated since 5.0
-	 *
-	 * @return LoadBalancerConnectionProvider
 	 */
-	public function newLoadBalancerConnectionProvider( $connectionType, $asConnectionRef = true ): LoadBalancerConnectionProvider {
-		$loadBalancerConnectionProvider = new LoadBalancerConnectionProvider(
-			$connectionType
-		);
+	public function newLoadBalancerConnectionProvider( $connectionType, $asConnectionRef = true ): IConnectionProvider {
+		return new class( $connectionType ) implements IConnectionProvider {
+			private ?IDatabase $connection = null;
 
-		return $loadBalancerConnectionProvider;
+			public function __construct( private $id ) {
+			}
+
+			public function getConnection(): IDatabase {
+				if ( $this->connection === null ) {
+					$loadBalancer = MediaWikiServices::getInstance()->getDBLoadBalancer();
+					$this->connection = $loadBalancer->getConnection( $this->id );
+				}
+
+				return $this->connection;
+			}
+
+			public function releaseConnection(): void {
+				$this->connection = null;
+			}
+		};
 	}
 
 	/**
@@ -142,7 +144,7 @@ class MwCollaboratorFactory {
 		);
 
 		$connectionProvider->setLogger(
-			$this->applicationFactory->getMediaWikiLogger()
+			LoggerFactory::getInstance( 'smw' )
 		);
 
 		return $connectionProvider;
@@ -175,24 +177,6 @@ class MwCollaboratorFactory {
 		);
 
 		return $pageInfoProvider;
-	}
-
-	/**
-	 * @deprecated since 3.1
-	 * @since 2.5
-	 *
-	 * @param WikiPage $wikiPage
-	 * @param RevisionRecord $revision
-	 * @param ?User $user
-	 *
-	 * @return EditInfo
-	 */
-	public function newEditInfoProvider(
-		WikiPage $wikiPage,
-		RevisionRecord $revision,
-		?User $user = null
-	): EditInfo {
-		return $this->newEditInfo( $wikiPage, $revision, $user );
 	}
 
 	/**

@@ -8,14 +8,12 @@ use MediaWiki\Revision\RevisionLookup;
 use MediaWiki\Revision\RevisionRecord;
 use MediaWiki\Title\Title;
 use PHPUnit\Framework\TestCase;
-use Psr\Log\LoggerInterface;
+use SMW\Connection\ConnectionProvider as IConnectionProvider;
 use SMW\MediaWiki\Connection\ConnectionProvider;
-use SMW\MediaWiki\Connection\LoadBalancerConnectionProvider;
 use SMW\MediaWiki\DeepRedirectTargetResolver;
 use SMW\MediaWiki\EditInfo;
 use SMW\MediaWiki\MagicWordsFinder;
 use SMW\MediaWiki\MediaWikiNsContentReader;
-use SMW\MediaWiki\MessageBuilder;
 use SMW\MediaWiki\MwCollaboratorFactory;
 use SMW\MediaWiki\PageCreator;
 use SMW\MediaWiki\PageInfoProvider;
@@ -54,26 +52,6 @@ class MwCollaboratorFactoryTest extends TestCase {
 		$this->assertInstanceOf(
 			MwCollaboratorFactory::class,
 			new MwCollaboratorFactory( $this->applicationFactory )
-		);
-	}
-
-	public function testCanConstructMessageBuilder() {
-		$instance = new MwCollaboratorFactory(
-			$this->applicationFactory
-		);
-
-		$this->assertInstanceOf(
-			MessageBuilder::class,
-			$instance->newMessageBuilder()
-		);
-
-		$language = $this->getMockBuilder( Language::class )
-			->disableOriginalConstructor()
-			->getMock();
-
-		$this->assertInstanceOf(
-			MessageBuilder::class,
-			$instance->newMessageBuilder( $language )
 		);
 	}
 
@@ -162,17 +140,13 @@ class MwCollaboratorFactoryTest extends TestCase {
 		$instance = new MwCollaboratorFactory( new ApplicationFactory() );
 
 		$this->assertInstanceOf(
-			LoadBalancerConnectionProvider::class,
+			IConnectionProvider::class,
 			$instance->newLoadBalancerConnectionProvider( DB_REPLICA )
 		);
 	}
 
 	public function testCanConstructConnectionProvider() {
 		$settings = $this->getMockBuilder( Settings::class )
-			->disableOriginalConstructor()
-			->getMock();
-
-		$logger = $this->getMockBuilder( LoggerInterface::class )
 			->disableOriginalConstructor()
 			->getMock();
 
@@ -183,10 +157,6 @@ class MwCollaboratorFactoryTest extends TestCase {
 		$this->applicationFactory->expects( $this->atLeastOnce() )
 			->method( 'getSettings' )
 			->willReturn( $settings );
-
-		$this->applicationFactory->expects( $this->atLeastOnce() )
-			->method( 'getMediaWikiLogger' )
-			->willReturn( $logger );
 
 		$instance = new MwCollaboratorFactory(
 			$this->applicationFactory

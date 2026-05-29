@@ -13,7 +13,6 @@ use SMW\DataModel\SemanticData;
 use SMW\DataValueFactory;
 use SMW\DataValues\ValueFormatters\DataValueFormatter;
 use SMW\Localizer\Localizer;
-use SMW\Services\ServicesFactory as ApplicationFactory;
 
 // phpcs:disable MediaWiki.Commenting.ClassAnnotations.UnrecognizedAnnotation
 
@@ -88,7 +87,6 @@ class MonolingualTextValue extends AbstractMultiValue {
 	public function getTextWithLanguageTag( string $text, $languageCode ): string {
 		$languageCode = Localizer::asBCP47FormattedLanguageCode( $languageCode );
 
-		// @TODO test de-formal with PropertyListByApiRequest
 		$mappedLanguageCode = array_search( $languageCode, $this->nonstandardLanguageCodeMapping ) ?: $languageCode;
 
 		return $text . '@' . $mappedLanguageCode;
@@ -107,7 +105,7 @@ class MonolingualTextValue extends AbstractMultiValue {
 
 		if (
 			( $languageCode !== '' && $languageCodeValue->getErrors() !== [] ) ||
-			( $languageCode === '' && $this->isEnabledFeature( SMW_DV_MLTV_LCODE ) ) ) {
+			( $languageCode === '' && $this->hasFeature( SMW_DV_MLTV_LCODE ) ) ) {
 			$this->addError( $languageCodeValue->getErrors() );
 			return;
 		}
@@ -194,7 +192,7 @@ class MonolingualTextValue extends AbstractMultiValue {
 					$semanticData->findSubSemanticData( $subobjectName )
 				);
 			} else {
-				$monolingualTextLookup = ApplicationFactory::getInstance()->getStore()->service( 'MonolingualTextLookup' );
+				$monolingualTextLookup = $this->dataValueServiceFactory->getStore()->service( 'MonolingualTextLookup' );
 				$monolingualTextLookup->setCaller( __METHOD__ );
 				$this->m_dataitem = $monolingualTextLookup->newDIContainer( $dataItem, $this->getProperty() );
 			}

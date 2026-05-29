@@ -4,9 +4,7 @@ namespace SMW\Tests\Unit\Services;
 
 use MediaWiki\Parser\Parser;
 use MediaWiki\Title\Title;
-use Onoi\EventDispatcher\EventDispatcher;
 use PHPUnit\Framework\TestCase;
-use Psr\Log\LoggerInterface;
 use SMW\CacheFactory;
 use SMW\Connection\ConnectionManager;
 use SMW\DataItemFactory;
@@ -14,6 +12,7 @@ use SMW\DataItems\WikiPage;
 use SMW\DataModel\SemanticData;
 use SMW\DataUpdater;
 use SMW\DataValueFactory;
+use SMW\EventDispatcher\EventDispatcher;
 use SMW\Factbox\FactboxFactory;
 use SMW\HierarchyLookup;
 use SMW\IteratorFactory;
@@ -24,7 +23,6 @@ use SMW\MediaWiki\JobFactory;
 use SMW\MediaWiki\MwCollaboratorFactory;
 use SMW\MediaWiki\PageCreator;
 use SMW\MediaWiki\PageUpdater;
-use SMW\MediaWiki\TitleFactory;
 use SMW\NamespaceExaminer;
 use SMW\Parser\ContentParser;
 use SMW\Parser\InTextAnnotationParser;
@@ -122,13 +120,6 @@ class ServicesFactoryTest extends TestCase {
 		$this->assertInstanceOf(
 			ConnectionManager::class,
 			$this->servicesFactory->getConnectionManager()
-		);
-	}
-
-	public function testCanConstructTitleFactory() {
-		$this->assertInstanceOf(
-			TitleFactory::class,
-			$this->servicesFactory->newTitleFactory()
 		);
 	}
 
@@ -271,13 +262,6 @@ class ServicesFactoryTest extends TestCase {
 		$this->assertInstanceOf(
 			TransactionalCallableUpdate::class,
 			$this->servicesFactory->newDeferredTransactionalCallableUpdate( null )
-		);
-	}
-
-	public function testCanConstructMediaWikiLogger() {
-		$this->assertInstanceOf(
-			LoggerInterface::class,
-			$this->servicesFactory->getMediaWikiLogger()
 		);
 	}
 

@@ -3,8 +3,10 @@
 namespace SMW\MediaWiki\Specials;
 
 use Iterator;
+use MediaWiki\Context\RequestContext;
 use MediaWiki\Html\Html;
 use MediaWiki\Linker\Linker;
+use MediaWiki\Navigation\PagerNavigationBuilder;
 use MediaWiki\SpecialPage\SpecialPage;
 use SMW\DataItems\Property;
 use SMW\DataItems\WikiPage;
@@ -17,7 +19,8 @@ use SMW\Formatters\Infolink;
 use SMW\Localizer\Message;
 use SMW\MediaWiki\Page\ListBuilder;
 use SMW\RequestOptions;
-use SMW\Services\ServicesFactory as ApplicationFactory;
+use SMW\Settings;
+use SMW\Store;
 use SMW\TypesRegistry;
 use SMW\Utils\HtmlColumns;
 use SMW\Utils\HtmlTabs;
@@ -36,9 +39,12 @@ use SMW\Utils\Pager;
 class SpecialTypes extends SpecialPage {
 
 	/**
-	 * @see SpecialPage::execute
+	 * @since 7.0.0
 	 */
-	public function __construct() {
+	public function __construct(
+		private readonly Store $store,
+		private readonly Settings $settings
+	) {
 		parent::__construct( 'Types' );
 	}
 
@@ -195,26 +201,44 @@ class SpecialTypes extends SpecialPage {
 			);
 		}
 
-		$this->addHelpLink( $this->msg( 'smw-specials-bytype-helplink', $typeLabel )->escaped(), true );
-		$applicationFactory = ApplicationFactory::getInstance();
-		$store = $applicationFactory->getStore();
+		$this->addHelpLink( $this->msg( 'smw-specials-bytype-helplink', $typeLabel )->text(), true );
 
-		$pagingLimit = $applicationFactory->getSettings()->dotGet( 'smwgPagingLimit.type' );
+		$pagingLimit = $this->settings->dotGet( 'smwgPagingLimit.type' );
 
 		// not too useful, but we comply to this request
 		if ( $pagingLimit <= 0 ) {
 			return '';
 		}
 
-		$limit = $this->getRequest()->getVal( 'limit', $pagingLimit );
-		$offset = $this->getRequest()->getVal( 'offset', 0 );
+		$request = $this->getRequest();
+		$limit = (int)$request->getVal( 'limit', $pagingLimit );
+		$offset = (int)$request->getVal( 'offset', 0 );
+		$after = $request->getInt( 'after', 0 );
+		$before = $request->getInt( 'before', 0 );
+
+		$cursorMode = self::shouldUseCursorMode( $request->getVal( 'offset', null ) );
 
 		$requestOptions = new RequestOptions();
 		$requestOptions->sort = true;
-		$requestOptions->setLimit( (int)$limit + 1 );
-		$requestOptions->setOffset( $offset );
 
-		$dataItems = $store->getPropertySubjects(
+		if ( $cursorMode ) {
+			// PropertySubjectsLookup applies its own LIMIT+1 lookahead in
+			// cursor mode, so the caller passes the plain page size.
+			$requestOptions->setLimit( $limit );
+			$requestOptions->setOption( RequestOptions::CURSOR_MODE, true );
+			if ( $after > 0 ) {
+				$requestOptions->setCursorAfter( $after );
+			} elseif ( $before > 0 ) {
+				$requestOptions->setCursorBefore( $before );
+			}
+		} else {
+			// Legacy offset path passes LIMIT+1 (existing convention — the
+			// extra row is rendered without trimming).
+			$requestOptions->setLimit( $limit + 1 );
+			$requestOptions->setOffset( $offset );
+		}
+
+		$dataItems = $this->store->getPropertySubjects(
 			new Property( '_TYPE' ),
 			$typeValue->getDataItem(),
 			$requestOptions
@@ -234,7 +258,7 @@ class SpecialTypes extends SpecialPage {
 			$typeId
 		);
 
-		$propertyTypeFinder = $store->service( 'PropertyTypeFinder' );
+		$propertyTypeFinder = $this->store->service( 'PropertyTypeFinder' );
 
 		$count = $propertyTypeFinder->countByType(
 			$typeId
@@ -267,18 +291,28 @@ class SpecialTypes extends SpecialPage {
 			return $result;
 		}
 
-		$html = Html::rawElement(
-			'div',
-			[
-				'class' => 'smw-page-navigation'
-			],
-			Pager::pagination(
+		if ( $cursorMode ) {
+			$paginationHtml = $this->renderCursorPager(
+				$typeLabel,
+				$limit,
+				$requestOptions
+			);
+		} else {
+			$paginationHtml = Pager::pagination(
 				$this->getTitleFor( 'Types', $typeLabel ),
 				$limit,
 				$offset,
 				$count,
 				[ '_target' => '#smw-list' ]
-			) . Html::rawElement(
+			);
+		}
+
+		$html = Html::rawElement(
+			'div',
+			[
+				'class' => 'smw-page-navigation'
+			],
+			$paginationHtml . Html::rawElement(
 				'div',
 				[
 					'class' => 'smw-page-nav-note'
@@ -288,7 +322,7 @@ class SpecialTypes extends SpecialPage {
 		);
 
 		$listBuilder = new ListBuilder(
-			$store
+			$this->store
 		);
 
 		$listBuilder->isRTL(
@@ -334,6 +368,77 @@ class SpecialTypes extends SpecialPage {
 				'class' => 'smw-types'
 			]
 		);
+	}
+
+	/**
+	 * Renders the cursor-mode prev/next pager. The legacy offset pager uses
+	 * the `_target` convention in `Pager::pagination` to append `#smw-list`
+	 * to each generated href so the user lands on the list rather than the
+	 * intro text after a page-flip. `PagerNavigationBuilder` has no equivalent
+	 * fragment hook, so the fragment is grafted onto each
+	 * rendered href here. Only the local hrefs emitted by the nav builder
+	 * are affected (they all target `Special:Types/<label>`).
+	 *
+	 * @since 7.0.0
+	 */
+	private function renderCursorPager(
+		string|array $typeLabel,
+		int $limit,
+		RequestOptions $cursorOptions
+	): string {
+		$isFirstPage = !$cursorOptions->hasCursor();
+
+		$navBuilder = new PagerNavigationBuilder( RequestContext::getMain() );
+		$navBuilder
+			->setPage( $this->getTitleFor( 'Types', $typeLabel ) )
+			->setLinkQuery( [ 'limit' => $limit ] )
+			->setLimitLinkQueryParam( 'limit' )
+			->setCurrentLimit( $limit )
+			->setPrevTooltipMsg( 'prevn-title' )
+			->setNextTooltipMsg( 'nextn-title' )
+			->setLimitTooltipMsg( 'shown-title' );
+
+		$isBackward = $cursorOptions->getCursorBefore() !== null;
+		$isAtEnd = !$cursorOptions->getCursorHasMore();
+		$showPrev = $isBackward ? !$isAtEnd : true;
+		$showNext = $isBackward ? true : !$isAtEnd;
+
+		if ( $showPrev && !$isFirstPage && $cursorOptions->getFirstCursor() !== null ) {
+			$navBuilder->setPrevLinkQuery( [ 'before' => (string)$cursorOptions->getFirstCursor() ] );
+		}
+
+		if ( $showNext && $cursorOptions->getLastCursor() !== null ) {
+			$navBuilder->setNextLinkQuery( [ 'after' => (string)$cursorOptions->getLastCursor() ] );
+		}
+
+		$html = $navBuilder->getHtml();
+
+		return preg_replace(
+			'/(href="[^"#]*)(")/',
+			'$1#smw-list$2',
+			$html
+		);
+	}
+
+	/**
+	 * Decides whether the request should be served via the cursor path or
+	 * the legacy offset path. Cursor mode is the default; the legacy path
+	 * is taken whenever the `offset` URL param is present at all, even if
+	 * its value is empty, garbage, or negative. The reasoning: an `offset=`
+	 * param signals offset semantics on the client side, so we honour the
+	 * intent rather than silently switching modes when the value coerces
+	 * to 0.
+	 *
+	 * Extracted as a static helper so the predicate can be unit-tested
+	 * without spinning up the full request context.
+	 *
+	 * @since 7.0.0
+	 *
+	 * @param string|null $offsetParamValue The raw value of `?offset=` from
+	 *   the request, or null if the param is absent.
+	 */
+	public static function shouldUseCursorMode( ?string $offsetParamValue ): bool {
+		return $offsetParamValue === null;
 	}
 
 	private function find_errors( $dataValue, $typeId, string $label ) {
@@ -455,7 +560,7 @@ class SpecialTypes extends SpecialPage {
 
 		// Add human readable group label
 		foreach ( $contents as $group => $values ) {
-			$groupLabel = Message::get( "smw-type-$group", Message::TEXT, Message::USER_LANGUAGE );
+			$groupLabel = Message::get( "smw-type-$group", Message::ESCAPED, Message::USER_LANGUAGE );
 			$contents[$groupLabel] = $values;
 			unset( $contents[$group] );
 		}

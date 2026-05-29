@@ -2,10 +2,11 @@
 
 namespace SMW\Elastic\Indexer;
 
-use MediaWiki\MediaWikiServices;
+use MediaWiki\Revision\RevisionLookup;
 use MediaWiki\Revision\RevisionRecord;
 use MediaWiki\Revision\SlotRecord;
 use MediaWiki\Title\Title;
+use MediaWiki\Title\TitleFactory;
 use Onoi\MessageReporter\MessageReporterAwareTrait;
 use Psr\Log\LoggerAwareTrait;
 use RuntimeException;
@@ -48,6 +49,8 @@ class Indexer {
 	public function __construct(
 		private Store $store,
 		private Bulk $bulk,
+		private readonly TitleFactory $titleFactory,
+		private readonly RevisionLookup $revisionLookup,
 	) {
 	}
 
@@ -118,7 +121,7 @@ class Indexer {
 			return;
 		}
 
-		$title = MediaWikiServices::getInstance()->getTitleFactory()->newFromText(
+		$title = $this->titleFactory->newFromText(
 			$this->origin . ':' . md5( json_encode( $idList ) )
 		);
 
@@ -155,12 +158,7 @@ class Indexer {
 		$response = $this->bulk->getResponse();
 
 		$this->logger->info(
-			[
-				'Indexer',
-				'Deleted list',
-				'procTime (in sec): {procTime}',
-				'Response: {response}'
-			],
+			'Indexer Deleted list procTime (in sec): {procTime} Response: {response}',
 			[
 				'method' => __METHOD__,
 				'role' => 'developer',
@@ -201,11 +199,7 @@ class Indexer {
 		$response = $connection->index( $params + [ 'body' => $data ] );
 
 		$this->logger->info(
-			[
-				'Indexer',
-				'Create ({subject}, {id})',
-				'Response: {response}'
-			],
+			'Indexer Create ({subject}, {id}) Response: {response}',
 			[
 				'method' => __METHOD__,
 				'role' => 'developer',
@@ -233,7 +227,7 @@ class Indexer {
 			return '';
 		}
 
-		$revision = MediaWikiServices::getInstance()->getRevisionLookup()->getRevisionById( $id );
+		$revision = $this->revisionLookup->getRevisionById( $id );
 
 		if ( $revision == null ) {
 			return '';
@@ -271,11 +265,8 @@ class Indexer {
 		$this->bulk->execute();
 
 		$this->logger->info(
-			[ 'Indexer',
-				'Data index completed ({subject}, {id})',
-				'procTime (in sec): {procTime}',
-				'Response: {response}'
-			],
+			'Indexer Data index completed ({subject}, {id}) '
+				. 'procTime (in sec): {procTime} Response: {response}',
 			[
 				'method' => __METHOD__,
 				'role' => 'developer',

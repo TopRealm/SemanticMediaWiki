@@ -2,12 +2,13 @@
 
 namespace SMW\QueryPages;
 
+use MediaWiki\Context\RequestContext;
 use MediaWiki\Html\Html;
 use MediaWiki\Linker\Linker;
+use MediaWiki\Navigation\PagerNavigationBuilder;
 use MediaWiki\SpecialPage\QueryPage as MWQueryPage;
 use MediaWiki\Xml\Xml;
 use SMW\Formatters\MessageFormatter;
-use SMW\MediaWiki\MessageBuilder;
 use SMW\RequestOptions;
 use SMW\StringCondition;
 
@@ -49,6 +50,8 @@ abstract class QueryPage extends MWQueryPage {
 	/**
 	 * Clear the cache and save new results
 	 * @todo Implement caching for SMW query pages
+	 *
+	 * @suppress PhanParamSignatureMismatch
 	 */
 	public function recache( $limit, $ignoreErrors = true ): void {
 		/// TODO
@@ -135,20 +138,33 @@ abstract class QueryPage extends MWQueryPage {
 		$limit = $this->selectOptions['limit'];
 		$options = $this->selectOptions['requestOptions'];
 
-		$msgBuilder = new MessageBuilder( $this->getLanguage() );
-
 		$isFirstPage = !$options->hasCursor();
 		$resultCount = $this->msg( 'smw-showingresults-cursor' )->numParams( $limit )->parse();
 
-		$selection = $msgBuilder->cursorPrevNextToText(
-			$this->getContext()->getTitle(),
-			$limit,
-			$isFirstPage ? null : $options->getFirstCursor(),
-			$options->getLastCursor(),
-			$this->linkParameters(),
-			$this->selectOptions['end'],
-			$options->getCursorBefore() !== null
-		);
+		$navBuilder = new PagerNavigationBuilder( RequestContext::getMain() );
+		$navBuilder
+			->setPage( $this->getContext()->getTitle() )
+			->setLinkQuery( [ 'limit' => $limit ] + $this->linkParameters() )
+			->setLimitLinkQueryParam( 'limit' )
+			->setCurrentLimit( $limit )
+			->setPrevTooltipMsg( 'prevn-title' )
+			->setNextTooltipMsg( 'nextn-title' )
+			->setLimitTooltipMsg( 'shown-title' );
+
+		$isBackward = $options->getCursorBefore() !== null;
+		$isAtEnd = $this->selectOptions['end'];
+		$showPrev = $isBackward ? !$isAtEnd : true;
+		$showNext = $isBackward ? true : !$isAtEnd;
+
+		if ( $showPrev && !$isFirstPage && $options->getFirstCursor() !== null ) {
+			$navBuilder->setPrevLinkQuery( [ 'before' => (string)$options->getFirstCursor() ] );
+		}
+
+		if ( $showNext && $options->getLastCursor() !== null ) {
+			$navBuilder->setNextLinkQuery( [ 'after' => (string)$options->getLastCursor() ] );
+		}
+
+		$selection = $navBuilder->getHtml();
 
 		if ( $cacheDate !== '' ) {
 			$cacheDate = Xml::tags( 'p', [], $cacheDate );
@@ -175,7 +191,7 @@ abstract class QueryPage extends MWQueryPage {
 
 		return Xml::tags( 'form', [
 			'method' => 'get',
-			'action' => htmlspecialchars( $GLOBALS['wgScript'] ),
+			'action' => $GLOBALS['wgScript'],
 			'class' => 'plainlinks'
 		], Html::hidden( 'title', $this->getContext()->getTitle()->getPrefixedText() ) .
 			Xml::fieldset( $this->msg( 'smw-special-property-searchform-options' )->text(),
@@ -197,6 +213,8 @@ abstract class QueryPage extends MWQueryPage {
 	 * @param $offset database query offset
 	 * @param $limit database query limit
 	 * @param $property database string query
+	 *
+	 * @suppress PhanParamSignatureMismatch
 	 */
 	public function doQuery( $offset = false, $limit = false, $property = false ): ?int {
 		$out  = $this->getOutput();

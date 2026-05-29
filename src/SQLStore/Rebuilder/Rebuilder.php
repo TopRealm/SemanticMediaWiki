@@ -3,14 +3,14 @@
 namespace SMW\SQLStore\Rebuilder;
 
 use MediaWiki\HookContainer\HookContainer;
-use MediaWiki\MediaWikiServices;
+use MediaWiki\Title\Title;
+use MediaWiki\Title\TitleFactory;
 use SMW\DataItems\WikiPage;
 use SMW\DataModel\SemanticData;
 use SMW\MediaWiki\JobFactory;
-use SMW\MediaWiki\TitleFactory;
+use SMW\MediaWiki\Jobs\UpdateJob;
 use SMW\NamespaceExaminer;
 use SMW\PropertyRegistry;
-use SMW\Services\ServicesFactory as ApplicationFactory;
 use SMW\SQLStore\PropertyTableIdReferenceDisposer;
 use SMW\SQLStore\SQLStore;
 use SMW\Utils\Lru;
@@ -29,14 +29,10 @@ use stdClass;
  */
 class Rebuilder {
 
-	private JobFactory $jobFactory;
-
 	/**
 	 * @var NamespaceExaminer
 	 */
 	private $namespaceExaminer;
-
-	private HookContainer $hookContainer;
 
 	private ?array $options = null;
 
@@ -63,9 +59,9 @@ class Rebuilder {
 		private readonly TitleFactory $titleFactory,
 		private readonly EntityValidator $entityValidator,
 		private readonly PropertyTableIdReferenceDisposer $propertyTableIdReferenceDisposer,
+		private readonly JobFactory $jobFactory,
+		private readonly HookContainer $hookContainer,
 	) {
-		$this->jobFactory = ApplicationFactory::getInstance()->newJobFactory();
-		$this->hookContainer = MediaWikiServices::getInstance()->getHookContainer();
 		$this->lru = new Lru( 10000 );
 	}
 
@@ -183,9 +179,6 @@ class Rebuilder {
 
 		$this->matchAsSubject( $id, $emptyRange );
 
-		// Deprecated since 2.3, use 'SMW::SQLStore::BeforeDataRebuildJobInsert'
-		$this->hookContainer->run( 'smwRefreshDataJobs', [ &$this->updateJobs ] );
-
 		$this->hookContainer->run( 'SMW::SQLStore::BeforeDataRebuildJobInsert', [ $this->store, &$this->updateJobs ] );
 
 		if ( $this->getOption( 'use-job' ) ) {
@@ -203,6 +196,36 @@ class Rebuilder {
 		return $this->progress;
 	}
 
+	/**
+	 * Bulk-fetches Title objects for a list of MediaWiki page IDs.
+	 *
+	 * @param int[] $ids
+	 *
+	 * @return Title[]
+	 */
+	private function newTitlesFromIDs( array $ids ): array {
+		if ( $ids === [] ) {
+			return [];
+		}
+
+		$connection = $this->store->getConnection( 'mw.db' );
+
+		$res = $connection->newSelectQueryBuilder()
+			->select( [ 'page_id', 'page_namespace', 'page_title' ] )
+			->from( 'page' )
+			->where( [ 'page_id' => $ids ] )
+			->caller( __METHOD__ )
+			->fetchResultSet();
+
+		$titles = [];
+
+		foreach ( $res as $row ) {
+			$titles[] = $this->titleFactory->newFromRow( $row );
+		}
+
+		return $titles;
+	}
+
 	private function matchAsTitle( $id ): void {
 		// Update by MediaWiki page id --> make sure we get all pages.
 		$tids = [];
@@ -212,7 +235,7 @@ class Rebuilder {
 			$tids[] = $i;
 		}
 
-		$titles = $this->titleFactory->newFromIDs( $tids );
+		$titles = $this->newTitlesFromIDs( $tids );
 
 		foreach ( $titles as $title ) {
 
@@ -447,7 +470,7 @@ class Rebuilder {
 		];
 
 		if ( $this->getOption( 'shallow-update' ) ) {
-			$params += [ 'shallowUpdate' => true ];
+			$params += [ UpdateJob::SHALLOW_UPDATE => true ];
 		} elseif ( $this->getOption( 'force-update' ) ) {
 			$params += [ 'forcedUpdate' => true ];
 		}

@@ -22,18 +22,15 @@ use SMW\Tests\TestEnvironment;
 class ValueFormatterTest extends TestCase {
 
 	private $testEnvironment;
-	private $store;
+	private Store $store;
+	private ValueFormatter $valueFormatter;
 
 	protected function setUp(): void {
 		parent::setUp();
 
 		$this->testEnvironment = new TestEnvironment();
-
-		$this->store = $this->getMockBuilder( Store::class )
-			->disableOriginalConstructor()
-			->getMockForAbstractClass();
-
-		$this->testEnvironment->registerObject( 'Store', $this->store );
+		$this->store = $this->createMock( Store::class );
+		$this->valueFormatter = new ValueFormatter( $this->store );
 	}
 
 	protected function tearDown(): void {
@@ -59,7 +56,7 @@ class ValueFormatterTest extends TestCase {
 
 		$this->assertIsString(
 
-			ValueFormatter::getFormattedSubject( $dataValue )
+			$this->valueFormatter->getFormattedSubject( $dataValue )
 		);
 	}
 
@@ -78,7 +75,7 @@ class ValueFormatterTest extends TestCase {
 
 		$this->assertIsString(
 
-			ValueFormatter::getFormattedValue( $dataValue, $propertyValue )
+			$this->valueFormatter->getFormattedValue( $dataValue, $propertyValue )
 		);
 	}
 
@@ -97,7 +94,7 @@ class ValueFormatterTest extends TestCase {
 
 		$this->assertIsString(
 
-			ValueFormatter::getPropertyLabel( $propertyValue )
+			$this->valueFormatter->getPropertyLabel( $propertyValue )
 		);
 	}
 

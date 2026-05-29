@@ -4,17 +4,16 @@ namespace SMW\Maintenance;
 
 use Exception;
 use MediaWiki\Title\Title;
+use MediaWiki\Title\TitleFactory;
 use Onoi\MessageReporter\MessageReporter;
 use Onoi\MessageReporter\MessageReporterFactory;
 use SMW\DataItems\WikiPage;
 use SMW\MediaWiki\JobFactory;
 use SMW\MediaWiki\Jobs\UpdateJob;
-use SMW\MediaWiki\TitleFactory;
 use SMW\MediaWiki\TitleLookup;
 use SMW\Options;
 use SMW\Query\QueryProcessor;
 use SMW\Query\QueryResult;
-use SMW\Services\ServicesFactory as ApplicationFactory;
 use SMW\Store;
 use SMW\Utils\CliMsgFormatter;
 
@@ -45,6 +44,7 @@ class DistinctEntityDataRebuilder {
 	public function __construct(
 		private readonly Store $store,
 		private readonly TitleFactory $titleFactory,
+		private readonly JobFactory $jobFactory,
 	) {
 		$this->reporter = MessageReporterFactory::getInstance()->newNullMessageReporter();
 	}
@@ -126,8 +126,6 @@ class DistinctEntityDataRebuilder {
 			$cliMsgFormatter->twoCols( "... selected pages ...", $total, 3 )
 		);
 
-		$jobFactory = ApplicationFactory::getInstance()->newJobFactory();
-
 		foreach ( $pages as $key => $page ) {
 
 			$this->rebuildCount++;
@@ -144,7 +142,7 @@ class DistinctEntityDataRebuilder {
 				);
 			}
 
-			$this->doUpdate( $jobFactory, $page );
+			$this->doUpdate( $this->jobFactory, $page );
 		}
 
 		if ( $pages !== [] && !$this->options->has( 'v' ) ) {
@@ -161,7 +159,7 @@ class DistinctEntityDataRebuilder {
 			$page,
 			[
 				UpdateJob::FORCED_UPDATE => true,
-				'shallowUpdate' => $this->options->has( 'shallow-update' )
+				UpdateJob::SHALLOW_UPDATE => $this->options->has( 'shallow-update' )
 			]
 		);
 

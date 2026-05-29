@@ -2,18 +2,20 @@
 
 namespace SMW\MediaWiki\Hooks;
 
+use MediaWiki\Hook\ParserAfterTidyHook;
+use MediaWiki\HookContainer\HookContainer;
 use MediaWiki\Parser\Parser;
 use MediaWiki\Parser\ParserOutputLinkTypes;
+use MediaWiki\Permissions\RestrictionStore;
 use Onoi\Cache\Cache;
-use Psr\Log\LoggerAwareTrait;
+use Psr\Log\LoggerInterface;
 use SMW\DataModel\SemanticData;
-use SMW\MediaWiki\HookDispatcherAwareTrait;
-use SMW\MediaWiki\HookListener;
-use SMW\MediaWiki\PageInfoProvider;
 use SMW\NamespaceExaminer;
-use SMW\OptionsAwareTrait;
 use SMW\ParserData;
 use SMW\Services\ServicesFactory as ApplicationFactory;
+use SMW\Settings;
+use SMW\Site;
+use WeakMap;
 
 /**
  * Hook: ParserAfterTidy to add some final processing to the
@@ -26,63 +28,153 @@ use SMW\Services\ServicesFactory as ApplicationFactory;
  *
  * @author mwjames
  */
-class ParserAfterTidy implements HookListener {
-
-	use OptionsAwareTrait;
-	use LoggerAwareTrait;
-	use HookDispatcherAwareTrait;
+class ParserAfterTidy implements ParserAfterTidyHook {
 
 	const CACHE_NAMESPACE = 'smw:parseraftertidy';
 
-	private bool $isCommandLineMode = false;
-
-	private bool $isReady = true;
+	/**
+	 * In-flight `Parser::parse()` calls, keyed by Parser instance and mapped
+	 * to the title prefixed-DB key being parsed. Used to distinguish the
+	 * outermost ParserAfterTidy fire from inner fires triggered by extensions
+	 * that clone the parser and recurse on the same title (see #5923).
+	 * Populated by `onParserClearState()` and drained in `process()`.
+	 *
+	 * Keyed by Parser instance so that short-lived clones are reclaimed by GC
+	 * automatically if `Parser::parse()` throws between `clearState` and
+	 * `ParserAfterTidy` (no `finally`-equivalent at the parser level). For a
+	 * long-lived parser whose entry survives an exception, the next successful
+	 * `process()` call for that parser re-runs the normal flow and clears the
+	 * entry, so the leak does not compound across requests.
+	 */
+	private static ?WeakMap $inFlightParses = null;
 
 	/**
-	 * @since  1.9
+	 * @since 7.0.0
 	 */
 	public function __construct(
-		private Parser &$parser,
-		private NamespaceExaminer $namespaceExaminer,
-		private Cache $cache,
+		private readonly NamespaceExaminer $namespaceExaminer,
+		private readonly Cache $cache,
+		private readonly ApplicationFactory $servicesFactory,
+		private readonly HookContainer $hookContainer,
+		private readonly Settings $settings,
+		private readonly LoggerInterface $logger,
+		private readonly RestrictionStore $restrictionStore,
 	) {
 	}
 
 	/**
-	 * @see https://www.mediawiki.org/wiki/Manual:$wgCommandLineMode
+	 * Hook handler for `ParserClearState`. Called at the start of every
+	 * `Parser::parse()` invocation (when `clearState` is true). Records the
+	 * parser as in-flight so a subsequent inner parse on the same title can
+	 * detect that it is nested and skip the update (see #5923).
 	 *
-	 * @since 2.5
+	 * @since 7.0.0
 	 */
-	public function isCommandLineMode( bool $isCommandLineMode ): void {
-		$this->isCommandLineMode = $isCommandLineMode;
+	public static function onParserClearState( Parser $parser ): void {
+		if ( $parser->getOptions()->getInterfaceMessage() ) {
+			return;
+		}
+		// `Parser::clearState()` can be invoked outside of an actual
+		// `Parser::parse()` (test helpers, manual state resets, etc.); in those
+		// cases `isLocked()` is `false` and the parser is not really competing
+		// for the title, so we must not record it as in-flight or we mark
+		// every later, unrelated parse of the same title as "nested".
+		if ( !$parser->isLocked() ) {
+			return;
+		}
+		if ( self::$inFlightParses === null ) {
+			self::$inFlightParses = new WeakMap();
+		}
+		// Re-setting for the same Parser is idempotent and self-healing if a
+		// previous parse on this instance leaked an entry by throwing.
+		self::$inFlightParses[$parser] = $parser->getTitle()->getPrefixedDBKey();
 	}
 
 	/**
-	 * @since 3.0
+	 * Reset the in-flight tracker. Intended for tests.
+	 *
+	 * @since 7.0.0
 	 */
-	public function isReady( bool $isReady ): void {
-		$this->isReady = $isReady;
+	public static function resetInFlightParses(): void {
+		self::$inFlightParses = null;
 	}
 
 	/**
-	 * @since 1.9
+	 * Count active in-flight parses for the given title (excluding the
+	 * supplied parser, if any).
 	 */
-	public function process( string &$text ): bool {
-		if ( $this->canPerformUpdate() ) {
-			$this->performUpdate( $text );
+	private static function countActiveParsesForTitle( string $titleKey, ?Parser $excluding ): int {
+		if ( self::$inFlightParses === null || $titleKey === '' ) {
+			return 0;
+		}
+		$count = 0;
+		foreach ( self::$inFlightParses as $parser => $parsedTitleKey ) {
+			if ( $parser === $excluding ) {
+				continue;
+			}
+			if ( $parsedTitleKey !== $titleKey ) {
+				continue;
+			}
+			// A leftover entry whose Parser is no longer locked is stale: the
+			// parse it represented has long ended (or never started). It must
+			// not be counted as a competing in-flight parse, otherwise the
+			// current outermost fire would be wrongly classified as nested.
+			if ( !$parser->isLocked() ) {
+				continue;
+			}
+			$count++;
+		}
+		return $count;
+	}
+
+	/**
+	 * @since 7.0.0
+	 */
+	public function onParserAfterTidy( $parser, &$text ) {
+		if ( !Site::isReady() ) {
+			$this->doAbort();
+			return true;
+		}
+
+		// `(string)` defends against unit-test mocks where `getTitle()` returns
+		// a Title mock whose `getPrefixedDBKey()` is not stubbed and resolves
+		// to `null` rather than the production `string`.
+		$key = (string)$parser->getTitle()->getPrefixedDBKey();
+
+		// #5923: When an extension clones the parser and re-enters `Parser::parse()`
+		// on the same title (e.g. DPL `<dpl>`, TabberNeue `<tabber>`), the inner
+		// parse fires its own `ParserAfterTidy`. Without this guard, the inner
+		// fire (which only sees a partial `ParserOutput`) would consume the
+		// `ArticlePurge` cache key in `checkPurgeRequest()` and persist incomplete
+		// data, while the outermost fire (with complete data) would skip because
+		// the key has been deleted. Skip processing for inner fires and let the
+		// outermost run with the full state. Interface-message parses are
+		// excluded from the tracker by `onParserClearState`, so they pass
+		// through here untouched.
+		$isNestedParse = $key !== ''
+			&& self::countActiveParsesForTitle( $key, $parser ) > 0;
+
+		try {
+			if ( !$isNestedParse && $this->canPerformUpdate( $parser ) ) {
+				$this->performUpdate( $parser, $text );
+			}
+		} finally {
+			if ( self::$inFlightParses !== null ) {
+				unset( self::$inFlightParses[$parser] );
+			}
 		}
 
 		return true;
 	}
 
-	private function canPerformUpdate(): bool {
+	private function canPerformUpdate( Parser $parser ): bool {
 		// #2432 avoid access to the DBLoadBalancer while being in readOnly mode
 		// when for example Title::isProtected is accessed
-		if ( !$this->isReady ) {
+		if ( !Site::isReady() ) {
 			return $this->doAbort();
 		}
 
-		$title = $this->parser->getTitle();
+		$title = $parser->getTitle();
 
 		if ( !$this->namespaceExaminer->isSemanticEnabled( $title->getNamespace() ) ) {
 			return false;
@@ -96,25 +188,19 @@ class ParserAfterTidy implements HookListener {
 
 		// ParserOptions::getInterfaceMessage is being used to identify whether a
 		// parse was initiated by `Message::parse`
-		if ( $title->isSpecialPage() || $this->parser->getOptions()->getInterfaceMessage() ) {
+		if ( $title->isSpecialPage() || $parser->getOptions()->getInterfaceMessage() ) {
 			return false;
 		}
 
-		$parserOutput = $this->parser->getOutput();
+		$parserOutput = $parser->getOutput();
 
 		// T301915
 		$displayTitle = $parserOutput->getPageProperty( 'displaytitle' ) ?? false;
 		$parserDefaultSort = $parserOutput->getPageProperty( 'defaultsort' );
 
 		$parserCategories = [];
-		// MW >= 1.40
-		if ( method_exists( $parserOutput, 'getCategorySortKey' ) ) {
-			$names = $parserOutput->getCategoryNames();
-			foreach ( $names as $name ) {
-				$parserCategories[$name] = $parserOutput->getCategorySortKey( $name );
-			}
-		} else {
-			$parserCategories = $parserOutput->getCategories();
+		foreach ( $parserOutput->getCategoryNames() as $name ) {
+			$parserCategories[$name] = $parserOutput->getCategorySortKey( $name );
 		}
 
 		if ( $displayTitle ||
@@ -125,7 +211,7 @@ class ParserAfterTidy implements HookListener {
 		}
 
 		if ( ParserData::hasSemanticData( $parserOutput ) ||
-			PageInfoProvider::isProtected( $title, 'edit ' ) ||
+			$this->restrictionStore->isProtected( $title, 'edit' ) ||
 			$parserDefaultSort ) {
 			return true;
 		}
@@ -144,18 +230,17 @@ class ParserAfterTidy implements HookListener {
 		return false;
 	}
 
-	private function performUpdate( string &$text ): void {
-		$applicationFactory = ApplicationFactory::getInstance();
-
-		$parserData = $applicationFactory->newParserData(
-			$this->parser->getTitle(),
-			$this->parser->getOutput()
+	private function performUpdate( Parser $parser, string &$text ): void {
+		$parserData = $this->servicesFactory->newParserData(
+			$parser->getTitle(),
+			$parser->getOutput()
 		);
 
 		$semanticData = $parserData->getSemanticData();
 
 		$this->addPropertyAnnotations(
-			$applicationFactory->singleton( 'PropertyAnnotatorFactory' ),
+			$parser,
+			$this->servicesFactory->singleton( 'PropertyAnnotatorFactory' ),
 			$semanticData
 		);
 
@@ -166,12 +251,12 @@ class ParserAfterTidy implements HookListener {
 		// an appropriate context reference otherwise it is assumed that the hook
 		// call is part of another non SMW related parse
 		if ( $subject->getContextReference() !== null || $subject->getNamespace() === NS_FILE ) {
-			$this->checkPurgeRequest( $parserData );
+			$this->checkPurgeRequest( $parser, $parserData );
 		}
 	}
 
-	private function addPropertyAnnotations( $propertyAnnotatorFactory, $semanticData ): void {
-		$parserOutput = $this->parser->getOutput();
+	private function addPropertyAnnotations( Parser $parser, $propertyAnnotatorFactory, $semanticData ): void {
+		$parserOutput = $parser->getOutput();
 
 		$propertyAnnotator = $propertyAnnotatorFactory->newNullPropertyAnnotator(
 			$semanticData
@@ -190,7 +275,7 @@ class ParserAfterTidy implements HookListener {
 
 		$propertyAnnotator = $propertyAnnotatorFactory->newEditProtectedPropertyAnnotator(
 			$propertyAnnotator,
-			$this->parser->getTitle()
+			$parser->getTitle()
 		);
 
 		// Special case! belongs to the EditProtectedPropertyAnnotator instance
@@ -227,7 +312,10 @@ class ParserAfterTidy implements HookListener {
 
 		$propertyAnnotator->addAnnotation();
 
-		$this->hookDispatcher->onParserAfterTidyPropertyAnnotationComplete( $propertyAnnotator, $parserOutput );
+		$this->hookContainer->run(
+			'SMW::Parser::ParserAfterTidyPropertyAnnotationComplete',
+			[ $propertyAnnotator, $parserOutput ]
+		);
 	}
 
 	/**
@@ -239,9 +327,9 @@ class ParserAfterTidy implements HookListener {
 	 * a static variable or any other messaging that is not persistent will not
 	 * work hence the reliance on the cache as temporary persistence marker
 	 */
-	private function checkPurgeRequest( $parserData ): ?bool {
+	private function checkPurgeRequest( Parser $parser, $parserData ): ?bool {
 		$start = microtime( true );
-		$title = $this->parser->getTitle();
+		$title = $parser->getTitle();
 
 		$key = smwfCacheKey( ArticlePurge::CACHE_NAMESPACE, $title->getArticleID() );
 
@@ -251,7 +339,7 @@ class ParserAfterTidy implements HookListener {
 
 			// Avoid a Parser::lock for when a PurgeRequest remains intact
 			// during an update process while being executed from the cmdLine
-			if ( $this->isCommandLineMode ) {
+			if ( Site::isCommandLineMode() ) {
 				return true;
 			}
 
@@ -266,7 +354,7 @@ class ParserAfterTidy implements HookListener {
 			);
 
 			// #3849
-			if ( $this->getOption( 'smwgCheckForRemnantEntities' ) === 'purge' ) {
+			if ( $this->settings->get( 'smwgCheckForRemnantEntities' ) === 'purge' ) {
 				$semanticData->setOption( SemanticData::OPT_CHECK_REMNANT_ENTITIES, true );
 			}
 

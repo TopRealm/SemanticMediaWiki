@@ -2,11 +2,12 @@
 
 namespace SMW\SQLStore;
 
-use MediaWiki\MediaWikiServices;
+use MediaWiki\JobQueue\JobFactory;
+use MediaWiki\Title\TitleFactory;
 use Onoi\Cache\Cache;
 use SMW\InMemoryPoolCache;
 use SMW\Listener\ChangeListener\ChangeRecord;
-use SMW\MediaWiki\Jobs\UpdateJob;
+use SMW\MediaWiki\Job;
 use SMW\SQLStore\TableBuilder\FieldType;
 use SMW\Store;
 use SMW\Utils\Flag;
@@ -30,6 +31,8 @@ class RedirectStore {
 	 */
 	public function __construct(
 		private readonly Store $store,
+		private readonly TitleFactory $titleFactory,
+		private readonly JobFactory $jobFactory,
 		private ?Cache $cache = null,
 	) {
 		if ( $this->cache === null ) {
@@ -204,6 +207,7 @@ class RedirectStore {
 		}
 
 		foreach ( $jobs as $job ) {
+			/** @var Job $job */
 			if ( $immediateMode ) {
 				$job->run();
 			} else {
@@ -302,12 +306,18 @@ class RedirectStore {
 
 		$res = $queryBuilder->fetchResultSet();
 
-		$titleFactory = MediaWikiServices::getInstance()->getTitleFactory();
 		foreach ( $res as $row ) {
-			$title = $titleFactory->makeTitleSafe( $row->ns, $row->t );
+			$title = $this->titleFactory->makeTitleSafe( $row->ns, $row->t );
 
 			if ( $title !== null ) {
-				$jobs[] = new UpdateJob( $title, [ 'origin' => 'RedirectStore' ] );
+				$jobs[] = $this->jobFactory->newJob(
+					'smw.update',
+					[
+						'namespace' => $title->getNamespace(),
+						'title' => $title->getDBkey(),
+						'origin' => 'RedirectStore',
+					]
+				);
 			}
 		}
 
