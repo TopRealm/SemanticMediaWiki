@@ -11,7 +11,14 @@ use SMW\Setup;
 use SMW\SQLStore\SQLStore;
 use SMW\Store;
 
-$basePath = getenv( 'MW_INSTALL_PATH' ) !== false ? getenv( 'MW_INSTALL_PATH' ) : __DIR__ . '/../../..';
+$basePath = getenv( 'MW_INSTALL_PATH' );
+
+// Default MediaWiki installation path when MW_INSTALL_PATH is not set;
+// hardcoded to the server's actual MediaWiki root directory.
+if ( $basePath === false || $basePath === '' ) {
+	$defaultMwInstallPath = '/www/wwwroot/MediaWiki';
+	$basePath = is_dir( $defaultMwInstallPath ) ? $defaultMwInstallPath : __DIR__ . '/../../..';
+}
 
 // @codeCoverageIgnoreStart
 require_once $basePath . '/maintenance/Maintenance.php';

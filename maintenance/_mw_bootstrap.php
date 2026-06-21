@@ -12,11 +12,12 @@
 // Prefer existing environment config
 $mwInstallPathEnv = getenv( 'MW_INSTALL_PATH' );
 
-// Optional default when not provided; only apply if it exists
+// Default MediaWiki installation path when MW_INSTALL_PATH is not set;
+// hardcoded to the server's actual MediaWiki root directory.
 $defaultMwInstallPath = '/www/wwwroot/MediaWiki';
-if ( ( $mwInstallPath === false || $mwInstallPath === '' ) && is_dir( $defaultMwInstallPath ) ) {
-    putenv( 'MW_INSTALL_PATH=' . $defaultMwInstallPath );
-    $mwInstallPath = $defaultMwInstallPath;
+if ( ( $mwInstallPathEnv === false || $mwInstallPathEnv === '' ) && is_dir( $defaultMwInstallPath ) ) {
+	putenv( 'MW_INSTALL_PATH=' . $defaultMwInstallPath );
+	$mwInstallPathEnv = $defaultMwInstallPath;
 }
 
 // Try to include from MW_INSTALL_PATH if valid; otherwise fall back to the
