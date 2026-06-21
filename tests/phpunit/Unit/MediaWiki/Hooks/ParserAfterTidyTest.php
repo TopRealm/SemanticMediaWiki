@@ -11,7 +11,6 @@ use MediaWiki\Permissions\RestrictionStore;
 use MediaWiki\Revision\RevisionLookup;
 use MediaWiki\Revision\RevisionRecord;
 use MediaWiki\Title\Title;
-use Onoi\Cache\Cache;
 use PHPUnit\Framework\TestCase;
 use ReflectionProperty;
 use RuntimeException;
@@ -27,6 +26,7 @@ use SMW\Store;
 use SMW\Tests\TestEnvironment;
 use SMW\Tests\Utils\Mock\MockTitle;
 use Throwable;
+use Wikimedia\ObjectCache\BagOStuff;
 use WikiPage;
 
 /**
@@ -88,7 +88,7 @@ class ParserAfterTidyTest extends TestCase {
 			->disableOriginalConstructor()
 			->getMock();
 
-		$this->cache = $this->getMockBuilder( Cache::class )
+		$this->cache = $this->getMockBuilder( BagOStuff::class )
 			->disableOriginalConstructor()
 			->getMock();
 
@@ -118,11 +118,10 @@ class ParserAfterTidyTest extends TestCase {
 	 */
 	private function setParserLocked( Parser $parser ): void {
 		$prop = new ReflectionProperty( Parser::class, 'mInParse' );
-		$prop->setAccessible( true );
 		$prop->setValue( $parser, true );
 	}
 
-	private function newInstance( ?Cache $cache = null, ?Settings $settings = null ): ParserAfterTidy {
+	private function newInstance( ?BagOStuff $cache = null, ?Settings $settings = null ): ParserAfterTidy {
 		return new ParserAfterTidy(
 			$this->namespaceExaminer,
 			$cache ?? $this->cache,
@@ -171,22 +170,17 @@ class ParserAfterTidyTest extends TestCase {
 		$instance->onParserAfterTidy( $this->parser, $text );
 	}
 
-	private function newMockCache( $id, $containsStatus, $fetchStatus ) {
-		$key = $this->applicationFactory->newCacheFactory()->getPurgeCacheKey( $id );
+	private function newMockCache( $id, $getStatus ) {
+		$key = smwfCacheKey( ArticlePurge::CACHE_NAMESPACE, $id );
 
-		$cache = $this->getMockBuilder( Cache::class )
+		$cache = $this->getMockBuilder( BagOStuff::class )
 			->disableOriginalConstructor()
 			->getMock();
 
 		$cache->expects( $this->any() )
-			->method( 'contains' )
+			->method( 'get' )
 			->with( $key )
-			->willReturn( $containsStatus );
-
-		$cache->expects( $this->any() )
-			->method( 'fetch' )
-			->with( $key )
-			->willReturn( $fetchStatus );
+			->willReturn( $getStatus );
 
 		return $cache;
 	}
@@ -219,7 +213,6 @@ class ParserAfterTidyTest extends TestCase {
 
 		$cache = $this->newMockCache(
 			$parameters['title']->getArticleID(),
-			$parameters['cache-contains'],
 			$parameters['cache-fetch']
 		);
 
@@ -258,7 +251,7 @@ class ParserAfterTidyTest extends TestCase {
 			->willReturn( [] );
 
 		$this->cache->expects( $this->any() )
-			->method( 'fetch' )
+			->method( 'get' )
 			->with( $this->stringContains( "smw:parseraftertidy" ) )
 			->willReturn( true );
 
@@ -590,8 +583,8 @@ class ParserAfterTidyTest extends TestCase {
 
 		// Cache key set as if `?action=purge` had fired, so checkPurgeRequest
 		// reaches `updateStore` (which then triggers our throwing store).
-		$cache = $this->applicationFactory->getCache();
-		$cache->save(
+		$cache = $this->applicationFactory->getObjectCache();
+		$cache->set(
 			smwfCacheKey(
 				ArticlePurge::CACHE_NAMESPACE,
 				$title->getArticleID()
@@ -670,7 +663,6 @@ class ParserAfterTidyTest extends TestCase {
 			[
 				'store'    => $store,
 				'title'    => $title,
-				'cache-contains' => true,
 				'cache-fetch'    => true,
 				'data-status' => true
 			]
@@ -699,7 +691,6 @@ class ParserAfterTidyTest extends TestCase {
 			[
 				'store'    => $store,
 				'title'    => $title,
-				'cache-contains' => false,
 				'cache-fetch'    => false,
 				'data-status' => true
 			]
@@ -728,7 +719,6 @@ class ParserAfterTidyTest extends TestCase {
 			[
 				'store'    => $store,
 				'title'    => $title,
-				'cache-contains' => false,
 				'cache-fetch'    => false,
 				'data-status' => true
 			]
@@ -769,7 +759,6 @@ class ParserAfterTidyTest extends TestCase {
 				'store'    => $store,
 				'title'    => $title,
 				'revision' => $revision,
-				'cache-contains' => true,
 				'cache-fetch'    => true,
 				'data-status' => true
 			]
@@ -802,7 +791,6 @@ class ParserAfterTidyTest extends TestCase {
 			[
 				'store'    => $store,
 				'title'    => $title,
-				'cache-contains' => true,
 				'cache-fetch'    => false,
 				'data-status' => true
 			]
@@ -827,7 +815,6 @@ class ParserAfterTidyTest extends TestCase {
 			[
 				'store'    => $store,
 				'title'    => $title,
-				'cache-contains' => true,
 				'cache-fetch'    => true,
 				'data-status' => false,
 				'displaytitle' => 'Foo'

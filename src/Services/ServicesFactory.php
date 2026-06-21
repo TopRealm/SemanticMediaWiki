@@ -3,6 +3,7 @@
 namespace SMW\Services;
 
 use JobQueueGroup;
+use MapCacheLRU;
 use MediaWiki\Language\Language;
 use MediaWiki\Logger\LoggerFactory;
 use MediaWiki\MediaWikiServices;
@@ -11,11 +12,6 @@ use MediaWiki\Parser\ParserOutput;
 use MediaWiki\Revision\RevisionLookup;
 use MediaWiki\Title\Title;
 use MediaWiki\User\User;
-use Onoi\BlobStore\BlobStore;
-use Onoi\Cache\Cache;
-use Onoi\Cache\CacheFactory as OnoiCacheFactory;
-use Onoi\Cache\FixedInMemoryLruCache;
-use Psr\Log\LoggerInterface;
 use RuntimeException;
 use SMW\CacheFactory;
 use SMW\Connection\ConnectionManager;
@@ -53,6 +49,7 @@ use SMW\MediaWiki\JobQueue;
 use SMW\MediaWiki\Jobs\ContentParserFactory;
 use SMW\MediaWiki\Jobs\PageUpdaterFactory;
 use SMW\MediaWiki\Jobs\ParserDataFactory;
+use SMW\MediaWiki\LinkBatch;
 use SMW\MediaWiki\MagicWordsFinder;
 use SMW\MediaWiki\MediaWikiNsContentReader;
 use SMW\MediaWiki\MwCollaboratorFactory;
@@ -77,6 +74,7 @@ use SMW\PropertyLabelFinder;
 use SMW\Protection\EditProtectionUpdater;
 use SMW\Protection\ProtectionValidator;
 use SMW\Query\Cache\CacheStats;
+use SMW\Query\Cache\QueryResultStore;
 use SMW\Query\Cache\ResultCache;
 use SMW\Query\Processor\ParamListProcessor;
 use SMW\Query\Processor\QueryCreator;
@@ -93,6 +91,7 @@ use SMW\Store;
 use SMW\StoreFactory;
 use SMW\Utils\Stats;
 use SMW\Utils\TempFile;
+use Wikimedia\ObjectCache\BagOStuff;
 use Wikimedia\Rdbms\IConnectionProvider;
 use WikiPage;
 
@@ -291,7 +290,6 @@ class ServicesFactory {
 			'Settings' => fn () => $this->getSettings(),
 			'EntityCache' => fn () => $this->getEntityCache(),
 			'JobQueue' => fn () => $this->getJobQueue(),
-			'Cache' => fn () => $this->getCache( ...$args ),
 			'JobQueueGroup' => fn () => $this->getJobQueueGroup(),
 			'PermissionManager' => fn () => $this->getPermissionManager(),
 			'RevisionGuard' => fn () => $this->getRevisionGuard(),
@@ -329,7 +327,6 @@ class ServicesFactory {
 			'ContentParserFactory' => fn () => $this->getContentParserFactory(),
 			'ParserDataFactory' => fn () => $this->getParserDataFactory(),
 			'PageUpdaterFactory' => fn () => $this->getPageUpdaterFactory(),
-			'Logger' => fn () => $this->getLogger(),
 			'MwCollaboratorFactory' => fn () => $this->getMwCollaboratorFactory(),
 			'NamespaceExaminer' => fn () => $this->getNamespaceExaminer(),
 			'DataValueServiceFactory' => fn () => $this->getDataValueServiceFactory(),
@@ -353,7 +350,7 @@ class ServicesFactory {
 			// @phan-suppress-next-line PhanParamTooFewUnpack
 			'PostProcHandler' => fn () => $this->newPostProcHandler( ...$args ),
 			// @phan-suppress-next-line PhanParamTooFewUnpack
-			'BlobStore' => fn () => $this->newBlobStore( ...$args ),
+			'QueryResultStore' => fn () => $this->newQueryResultStore( ...$args ),
 			'ResultCache' => fn () => $this->getResultCache( ...$args ),
 			// @phan-suppress-next-line PhanParamTooFewUnpack
 			'Stats' => fn () => $this->newStats( ...$args ),
@@ -367,7 +364,6 @@ class ServicesFactory {
 			'DefaultSearchEngineTypeForDB' => fn () => $this->getDefaultSearchEngineTypeForDB( ...$args ),
 			// @phan-suppress-next-line PhanParamTooFewUnpack
 			'WikiPage' => fn () => $this->newWikiPage( ...$args ),
-			'FixedInMemoryLruCache' => fn () => $this->newFixedInMemoryLruCache( ...$args ),
 			'JobFactory' => fn () => $this->newJobFactory(),
 		];
 
@@ -676,17 +672,6 @@ class ServicesFactory {
 	}
 
 	/**
-	 * @since 7.0.0
-	 */
-	public function getLogger(): LoggerInterface {
-		if ( array_key_exists( 'Logger', $this->testOverrides ) ) {
-			return $this->testOverrides['Logger'];
-		}
-
-		return MediaWikiServices::getInstance()->getService( 'SMW.Logger' );
-	}
-
-	/**
 	 * @since 2.5
 	 */
 	public function newPageUpdater( $connection = null, ?TransactionalCallableUpdate $transactionalCallableUpdate = null ): PageUpdater {
@@ -741,24 +726,14 @@ class ServicesFactory {
 	}
 
 	/**
-	 * @since 2.0
+	 * Resolve a MediaWiki-native BagOStuff for the configured main cache type.
 	 *
-	 * @return Cache
+	 * @since 7.0.0
 	 */
-	public function getCache( $cacheType = null ) {
-		if ( array_key_exists( 'Cache', $this->testOverrides ) ) {
-			return $this->testOverrides['Cache'];
-		}
-
-		// SMW.Cache on the global container is the default-type cache.
-		// Non-default cache-type requests still build a fresh
-		// MediaWikiCompositeCache (callers depend on type-specific caches and
-		// the global registration only covers the default).
-		if ( $cacheType !== null ) {
-			return ( new CacheFactory() )->newMediaWikiCompositeCache( $cacheType );
-		}
-
-		return MediaWikiServices::getInstance()->getService( 'SMW.Cache' );
+	public function getObjectCache( $cacheType = null ): BagOStuff {
+		return MediaWikiServices::getInstance()->getObjectCacheFactory()->getInstance(
+			$cacheType ?? ( new CacheFactory() )->getMainCacheType()
+		);
 	}
 
 	/**
@@ -770,6 +745,17 @@ class ServicesFactory {
 		}
 
 		return MediaWikiServices::getInstance()->getService( 'SMW.EntityCache' );
+	}
+
+	/**
+	 * @since 7.0.0
+	 */
+	public function getLinkBatch(): LinkBatch {
+		if ( array_key_exists( 'LinkBatch', $this->testOverrides ) ) {
+			return $this->testOverrides['LinkBatch'];
+		}
+
+		return MediaWikiServices::getInstance()->getService( 'SMW.LinkBatch' );
 	}
 
 	/**
@@ -978,7 +964,7 @@ class ServicesFactory {
 
 		$hierarchyLookup = new HierarchyLookup(
 			$store ?? $this->getStore(),
-			$this->getCache( $cacheType )
+			$this->getObjectCache( $cacheType )
 		);
 
 		$hierarchyLookup->setLogger(
@@ -1132,31 +1118,32 @@ class ServicesFactory {
 	/**
 	 * @since 7.0.0
 	 */
-	public function newBlobStore( $namespace, $cacheType = null, $ttl = 0 ): BlobStore {
-		if ( array_key_exists( 'BlobStore', $this->testOverrides ) ) {
-			return $this->testOverrides['BlobStore'];
+	public function newQueryResultStore( $namespace, $cacheType = null, $ttl = 0 ): QueryResultStore {
+		if ( array_key_exists( 'QueryResultStore', $this->testOverrides ) ) {
+			return $this->testOverrides['QueryResultStore'];
 		}
 
 		$cacheFactory = $this->getCacheFactory();
 
-		$blobStore = new BlobStore(
+		$store = new QueryResultStore(
 			$namespace,
-			$cacheFactory->newMediaWikiCompositeCache( $cacheType )
+			$this->getObjectCache( $cacheType ),
+			new MapCacheLRU( 500 )
 		);
 
-		$blobStore->setNamespacePrefix(
+		$store->setNamespacePrefix(
 			$cacheFactory->getCachePrefix()
 		);
 
-		$blobStore->setExpiryInSeconds(
+		$store->setExpiryInSeconds(
 			$ttl
 		);
 
-		$blobStore->setUsageState(
+		$store->setUsageState(
 			$cacheType !== CACHE_NONE && $cacheType !== false
 		);
 
-		return $blobStore;
+		return $store;
 	}
 
 	/**
@@ -1167,22 +1154,21 @@ class ServicesFactory {
 			return $this->testOverrides['ResultCache'];
 		}
 
-		$cacheFactory = $this->getCacheFactory();
 		$settings = $this->getSettings();
 
 		$cacheType = $cacheType === null ? $settings->get( 'smwgQueryResultCacheType' ) : $cacheType;
 
-		// Explicitly use the CACHE_DB to access a SqlBagOstuff instance
+		// Explicitly use the CACHE_DB to access a SqlBagOStuff instance
 		// for a bit more persistence
 		$cacheStats = new CacheStats(
-			$cacheFactory->newMediaWikiCache( CACHE_DB ),
+			$this->getObjectCache( CACHE_DB ),
 			ResultCache::STATSD_ID
 		);
 
 		$resultCache = new ResultCache(
 			$this->getStore(),
 			$this->getQueryFactory(),
-			$this->newBlobStore(
+			$this->newQueryResultStore(
 				ResultCache::CACHE_NAMESPACE,
 				$cacheType,
 				$settings->get( 'smwgQueryResultCacheLifetime' )
@@ -1222,11 +1208,9 @@ class ServicesFactory {
 			return $this->testOverrides['Stats'];
 		}
 
-		$cacheFactory = $this->getCacheFactory();
-
-		// Explicitly use the DB to access a SqlBagOstuff instance
+		// Explicitly use the DB to access a SqlBagOStuff instance
 		return new Stats(
-			$cacheFactory->newMediaWikiCache( CACHE_DB ),
+			$this->getObjectCache( CACHE_DB ),
 			$id
 		);
 	}
@@ -1276,13 +1260,6 @@ class ServicesFactory {
 	 */
 	public function newWikiPage( Title $title ) {
 		return $this->newPageCreator()->createPage( $title );
-	}
-
-	/**
-	 * @since 7.0.0
-	 */
-	public function newFixedInMemoryLruCache( int $cacheSize = 500 ): FixedInMemoryLruCache {
-		return OnoiCacheFactory::getInstance()->newFixedInMemoryLruCache( $cacheSize );
 	}
 
 	/**
@@ -1645,7 +1622,7 @@ class ServicesFactory {
 
 		$postProcHandler = new PostProcHandler(
 			$parserOutput,
-			$this->getCache()
+			$this->getObjectCache()
 		);
 
 		$postProcHandler->setOptions(

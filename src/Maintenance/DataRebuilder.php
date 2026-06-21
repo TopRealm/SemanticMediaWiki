@@ -2,7 +2,6 @@
 
 namespace SMW\Maintenance;
 
-use Exception;
 use MediaWiki\MediaWikiServices;
 use MediaWiki\Title\Title;
 use MediaWiki\Title\TitleFactory;
@@ -16,6 +15,7 @@ use SMW\Services\ServicesFactory as ApplicationFactory;
 use SMW\SQLStore\Rebuilder\Rebuilder;
 use SMW\Store;
 use SMW\Utils\CliMsgFormatter;
+use Throwable;
 
 /**
  * Is part of the `rebuildData.php` maintenance script to rebuild existing data
@@ -189,6 +189,13 @@ class DataRebuilder {
 			$this->options->has( 'query' ) ||
 			$this->hasFilters() ||
 			$this->options->has( 'redirects' ) ) {
+
+			if ( $this->options->safeGet( 'use-job', false ) ) {
+				$this->reportMessage(
+					"\nNote: --use-job applies to full rebuilds only; the selected pages are processed inline.\n"
+				);
+			}
+
 			return $this->rebuildFromSelection();
 		}
 
@@ -272,17 +279,29 @@ class DataRebuilder {
 				'shallow-update' => $this->options->safeGet( 'shallow-update', false ),
 				'force-update' => $this->options->safeGet( 'force-update', false ),
 				'revision-mode' => $this->options->safeGet( 'revision-mode', false ),
-				'use-job' => false
+				'use-job' => $this->options->safeGet( 'use-job', false )
 			]
 		);
 
 		// By default we expect the disposal action to take place whenever the
-		// script is run
-		$this->runOutdatedDisposer();
+		// script is run; --skip-dispose opts out so disposal can be run separately
+		// (e.g. sharded) without colliding with parallel ranged rebuilds.
+		$skipDispose = $this->options->safeGet( 'skip-dispose', false );
 
-		// Only expected the disposal action?
 		if ( $this->options->has( 'dispose-outdated' ) ) {
+			if ( $skipDispose ) {
+				$this->reportMessage(
+					"\nNote: --skip-dispose with --dispose-outdated does nothing; no disposal performed.\n"
+				);
+				return true;
+			}
+
+			$this->runOutdatedDisposer();
 			return true;
+		}
+
+		if ( !$skipDispose ) {
+			$this->runOutdatedDisposer();
 		}
 
 		if ( !$this->options->has( 'skip-properties' ) ) {
@@ -343,6 +362,10 @@ class DataRebuilder {
 		$current_id = 0;
 		$max = ( $this->end ? "$this->end" : $maxId );
 
+		// Snapshot the exception count so the data-step failures can be
+		// distinguished from any logged during the preceding property rebuild.
+		$exceptionsBefore = $this->exceptionFileLogger->getExceptionCount();
+
 		while ( ( ( !$this->end ) || ( $id <= $this->end ) ) && ( $id > 0 ) ) {
 
 			if ( $this->autoRecovery !== null ) {
@@ -402,15 +425,42 @@ class DataRebuilder {
 
 		$this->write_to_file( $id );
 
+		$failed = $this->exceptionFileLogger->getExceptionCount() - $exceptionsBefore;
+
 		$this->reportMessage(
-			$this->cliMsgFormatter->twoCols( '   ... refreshed (IDs)', sprintf( "%s", ( $this->rebuildCount - $this->start ) ) )
+			$this->cliMsgFormatter->twoCols( '   ... refreshed (IDs)', sprintf( "%s", ( $this->rebuildCount - $this->start ) - $failed ) )
 		);
 
 		$this->reportMessage(
 			$this->cliMsgFormatter->twoCols( '   ... skipped (IDs)', sprintf( "%s", $skipped_update ) )
 		);
 
-		$this->reportMessage( "   ... done.\n" );
+		if ( $failed > 0 ) {
+			$this->reportMessage(
+				$this->cliMsgFormatter->twoCols( '   ... failed (IDs)', sprintf( "%s", $failed ) )
+			);
+
+			$this->reportMessage( "   ... completed with errors.\n" );
+		} else {
+			$this->reportMessage( "   ... done.\n" );
+		}
+
+		if ( $this->options->safeGet( 'use-job', false ) ) {
+			$text = [
+				'Update jobs have been queued instead of run inline.',
+				"\n\n",
+				'Process them in parallel with the MediaWiki job runner, for example:',
+				"\n\n",
+				'   php maintenance/runJobs.php --type smw.update --procs <N>',
+				"\n\n",
+				'Tune <N> to what your database can absorb; more workers is not always',
+				'faster because all workers write the same tables.'
+			];
+
+			$this->reportMessage(
+				"\n" . $this->cliMsgFormatter->wordwrap( $text ) . "\n"
+			);
+		}
 
 		if ( $this->options->has( 'ignore-exceptions' ) && $this->exceptionFileLogger->getExceptionCount() > 0 ) {
 			$this->reportMessage(
@@ -440,8 +490,16 @@ class DataRebuilder {
 
 			try {
 				$this->entityRebuildDispatcher->rebuild( $id );
-			} catch ( Exception $e ) {
+			} catch ( Throwable $e ) {
 				$this->exceptionFileLogger->recordException( $id, $e );
+
+				// Rebuilder::rebuild() advances $id only via next_position() at
+				// the very end, after running its jobs; when a job throws that
+				// step is skipped and $id keeps pointing at the failing entity.
+				// Advance past it (the dispatch range is fixed to 1 in
+				// rebuildAll()) so the run continues instead of reprocessing the
+				// same id indefinitely.
+				$id++;
 			}
 		}
 

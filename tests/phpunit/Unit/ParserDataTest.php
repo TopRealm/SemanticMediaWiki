@@ -443,6 +443,38 @@ class ParserDataTest extends TestCase {
 		);
 	}
 
+	public function testVariesByUserLanguageDefaultsToFalse() {
+		$title = $this->getMockBuilder( Title::class )
+			->disableOriginalConstructor()
+			->getMock();
+
+		$instance = new ParserData(
+			$title,
+			new ParserOutput()
+		);
+
+		$this->assertFalse(
+			$instance->variesByUserLanguage()
+		);
+	}
+
+	public function testMarkVariesByUserLanguage() {
+		$title = $this->getMockBuilder( Title::class )
+			->disableOriginalConstructor()
+			->getMock();
+
+		$instance = new ParserData(
+			$title,
+			new ParserOutput()
+		);
+
+		$instance->markVariesByUserLanguage();
+
+		$this->assertTrue(
+			$instance->variesByUserLanguage()
+		);
+	}
+
 	public function testAddExtraParserKey() {
 		$parserOptions = $this->getMockBuilder( ParserOptions::class )
 			->disableOriginalConstructor()
@@ -529,32 +561,6 @@ class ParserDataTest extends TestCase {
 		$instance = new ParserData( $title, $parserOutput );
 		$instance->setParserOptions( $parserOptions );
 		$instance->addExtraParserKey( 'smwq' );
-	}
-
-	public function testAddExtraParserKeyForDisabledDateformatDoesNothing() {
-		$this->testEnvironment->withConfiguration( [ 'smwgSetParserCacheKeys' => [] ] );
-
-		$parserOptions = $this->getMockBuilder( ParserOptions::class )
-			->disableOriginalConstructor()
-			->getMock();
-
-		$parserOptions->expects( $this->never() )
-			->method( 'addExtraKey' );
-
-		$title = $this->getMockBuilder( Title::class )
-			->disableOriginalConstructor()
-			->getMock();
-
-		$parserOutput = $this->getMockBuilder( ParserOutput::class )
-			->disableOriginalConstructor()
-			->getMock();
-
-		$parserOutput->expects( $this->never() )
-			->method( 'recordOption' );
-
-		$instance = new ParserData( $title, $parserOutput );
-		$instance->setParserOptions( $parserOptions );
-		$instance->addExtraParserKey( 'dateformat' );
 	}
 
 }

@@ -31,12 +31,21 @@ trait MockSelectQueryBuilderTrait {
 	 *   arguments in call order. Each invocation appends one entry. Lets tests
 	 *   verify which table the chain was pointed at, including the multi-table
 	 *   tables()/rawTables() form. Subqueries share the same array.
+	 * @param array &$capturedUseIndex Captures useIndex() arguments in call
+	 *   order. Each invocation appends one entry. Lets tests verify whether (and
+	 *   with which index) an index hint was applied. Subqueries share the same
+	 *   array.
+	 * @param array &$capturedLimits Captures limit() arguments in call order.
+	 *   Each invocation appends one entry. Lets tests verify that no negative
+	 *   (or otherwise invalid) LIMIT is applied. Subqueries share the same array.
 	 */
 	private function createMockSelectQueryBuilder(
 		array $rows = [],
 		array &$whereConditions = [],
 		array &$capturedSelects = [],
-		array &$capturedTables = []
+		array &$capturedTables = [],
+		array &$capturedUseIndex = [],
+		array &$capturedLimits = []
 	): SelectQueryBuilder {
 		$queryBuilder = $this->getMockBuilder( SelectQueryBuilder::class )
 			->disableOriginalConstructor()
@@ -45,8 +54,8 @@ trait MockSelectQueryBuilderTrait {
 		$chainMethods = [ 'fields', 'field',
 			'join', 'leftJoin', 'straightJoin', 'joinConds',
 			'groupBy', 'having', 'orderBy', 'caller', 'distinct',
-			'limit', 'offset', 'options', 'option', 'conds',
-			'useIndex', 'ignoreIndex', 'recency', 'clearFields',
+			'offset', 'options', 'option', 'conds',
+			'ignoreIndex', 'recency', 'clearFields',
 			'lockInShareMode', 'forUpdate' ];
 
 		foreach ( $chainMethods as $method ) {
@@ -54,6 +63,13 @@ trait MockSelectQueryBuilderTrait {
 				->method( $method )
 				->willReturnSelf();
 		}
+
+		$queryBuilder->expects( $this->any() )
+			->method( 'limit' )
+			->willReturnCallback( static function ( $limit ) use ( $queryBuilder, &$capturedLimits ) {
+				$capturedLimits[] = $limit;
+				return $queryBuilder;
+			} );
 
 		$captureWhere = static function ( $conds ) use ( $queryBuilder, &$whereConditions ) {
 			$whereConditions[] = $conds;
@@ -86,10 +102,17 @@ trait MockSelectQueryBuilderTrait {
 		}
 
 		$queryBuilder->expects( $this->any() )
+			->method( 'useIndex' )
+			->willReturnCallback( static function ( $index ) use ( $queryBuilder, &$capturedUseIndex ) {
+				$capturedUseIndex[] = $index;
+				return $queryBuilder;
+			} );
+
+		$queryBuilder->expects( $this->any() )
 			->method( 'newSubquery' )
 			->willReturnCallback(
 				fn () => $this->createMockSelectQueryBuilder(
-					$rows, $whereConditions, $capturedSelects, $capturedTables
+					$rows, $whereConditions, $capturedSelects, $capturedTables, $capturedUseIndex, $capturedLimits
 				)
 			);
 
@@ -105,7 +128,7 @@ trait MockSelectQueryBuilderTrait {
 		$firstField = false;
 		if ( is_object( $firstRow ) ) {
 			$vars = get_object_vars( $firstRow );
-			$firstField = $vars[array_key_first( $vars )] ?? false;
+			$firstField = $vars[array_key_first( $vars ) ?? ''] ?? false;
 		} elseif ( is_array( $firstRow ) ) {
 			$firstField = reset( $firstRow );
 		}

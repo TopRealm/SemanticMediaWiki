@@ -429,6 +429,7 @@ class QueryProcessor implements QueryContext {
 		 * @var ResultPrinter $printer
 		 */
 		$printer = new $formatClass( $format, ( $context != self::SPECIAL_PAGE ) );
+		$printer->setContext( $context );
 
 		if ( self::$recursiveTextProcessor === null ) {
 			self::$recursiveTextProcessor = new RecursiveTextProcessor();
@@ -468,7 +469,7 @@ class QueryProcessor implements QueryContext {
 	public static function getFormatParameters( $format ): array {
 		ResultFormat::resolveFormatAliases( $format );
 
-		if ( !array_key_exists( $format, $GLOBALS['smwgResultFormats'] ) ) {
+		if ( !array_key_exists( $format ?? '', $GLOBALS['smwgResultFormats'] ) ) {
 			return [];
 		}
 

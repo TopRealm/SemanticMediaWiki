@@ -10,6 +10,7 @@ use SMW\DataValues\DataValue;
 use SMW\DataValues\Time\IntlTimeFormatter;
 use SMW\DataValues\TimeValue;
 use SMW\Localizer\Localizer;
+use SMW\MediaWiki\Outputs;
 
 /**
  * @license GPL-2.0-or-later
@@ -44,17 +45,45 @@ class TimeValueFormatter extends DataValueFormatter {
 		if (
 			$this->dataValue->isValid() &&
 			( $type === self::WIKI_SHORT || $type === self::HTML_SHORT ) ) {
-			return ( $this->dataValue->getCaption() !== false ) ? $this->dataValue->getCaption() : $this->getPreferredCaption();
+			$caption = ( $this->dataValue->getCaption() !== false ) ? $this->dataValue->getCaption() : $this->getPreferredCaption();
+			return $type === self::HTML_SHORT ? $this->wrapInTimeElement( $caption ) : $caption;
 		}
 
 		if (
 			$this->dataValue->isValid() &&
 			( $type === self::WIKI_LONG || $type === self::HTML_LONG ) ) {
-			return $this->getPreferredCaption();
+			$caption = $this->getPreferredCaption();
+			return $type === self::HTML_LONG ? $this->wrapInTimeElement( $caption ) : $caption;
 		}
 
 		// #1074
 		return $this->dataValue->getCaption() !== false ? $this->dataValue->getCaption() : '';
+	}
+
+	/**
+	 * Wrap a rendered date caption in a semantic <time> element carrying a
+	 * machine-readable ISO 8601 datetime, so HTML output exposes the date to
+	 * assistive technology and other consumers. Wiki output is left plain.
+	 *
+	 * BCE dates are returned unwrapped: the HTML <time> datetime attribute has
+	 * no representation for year 0 or negative years, which the partial ISO
+	 * string signals with a leading "-".
+	 */
+	private function wrapInTimeElement( string $caption ): string {
+		// The caption may already carry a <time> element (for example the
+		// deferred local-time conversion in getLocalizedFormat); don't nest a
+		// second one.
+		if ( str_contains( $caption, '<time' ) ) {
+			return $caption;
+		}
+
+		$datetime = $this->getPartialISO8601Date();
+
+		if ( $datetime === '' || $datetime[0] === '-' ) {
+			return $caption;
+		}
+
+		return Html::rawElement( 'time', [ 'datetime' => $datetime ], $caption );
 	}
 
 	/**
@@ -161,6 +190,10 @@ class TimeValueFormatter extends DataValueFormatter {
 		$language = Localizer::getInstance()->getLanguage(
 			$this->dataValue->getOption( DataValue::OPT_USER_LANGUAGE )
 		);
+
+		// The MEDIAWIKI output format renders the date in the viewer's interface
+		// language, so the output is not cache-stable across languages.
+		$this->dataValue->recordUserLanguageOutput();
 
 		$year = $dataItem->getYear();
 
@@ -288,6 +321,11 @@ class TimeValueFormatter extends DataValueFormatter {
 			$dataItem->getYear() > Time::PREHISTORY &&
 			preg_match( "/\[([^\]]*)\]/", $this->dataValue->getOutputFormat(), $matches )
 		) {
+			// The free format renders month and day names in the viewer's
+			// interface language, so the output is not cache-stable across
+			// languages.
+			$this->dataValue->recordUserLanguageOutput();
+
 			$intlTimeFormatter = new IntlTimeFormatter( $dataItem, $language );
 
 			$caption = $intlTimeFormatter->format( $matches[1] );
@@ -317,7 +355,6 @@ class TimeValueFormatter extends DataValueFormatter {
 
 		$outputFormat = $this->dataValue->getOutputFormat();
 		$formatFlag = IntlTimeFormatter::LOCL_DEFAULT;
-		$hasTimeCorrection = false;
 
 		if ( strpos( $outputFormat, 'TO' ) !== false ) {
 			$formatFlag = IntlTimeFormatter::LOCL_TIMEOFFSET;
@@ -329,9 +366,29 @@ class TimeValueFormatter extends DataValueFormatter {
 			$outputFormat = str_replace( '#TZ', '', $outputFormat );
 		}
 
+		// #6820: for embedded (parser-cached) output, defer the viewing-user
+		// offset to the client. Render a wiki-local baseline and wrap it in a
+		// <time> element carrying the absolute UTC instant; only for a pure #TO value
+		// (no stored timezone) that actually has a time component.
+		$deferLocalTime =
+			$this->dataValue->getOption( DataValue::OPT_DEFER_LOCAL_TIME ) === true &&
+			( IntlTimeFormatter::LOCL_TIMEOFFSET & $formatFlag ) !== 0 &&
+			( IntlTimeFormatter::LOCL_TIMEZONE & $formatFlag ) === 0 &&
+			$dataItem->getPrecision() === Time::PREC_YMDT;
+
+		if ( $deferLocalTime ) {
+			$formatFlag = ( $formatFlag & ~IntlTimeFormatter::LOCL_TIMEOFFSET )
+				| IntlTimeFormatter::LOCL_WIKI_TIMEOFFSET;
+		}
+
 		$language = Localizer::getInstance()->getAnnotatedLanguageCodeFrom( $outputFormat );
 		if ( $language === false ) {
 			$language = $this->dataValue->getOption( DataValue::OPT_USER_LANGUAGE );
+
+			// Without an annotated language code the LOCL format renders the
+			// date in the viewer's interface language, so the output is not
+			// cache-stable across languages.
+			$this->dataValue->recordUserLanguageOutput();
 		}
 
 		$language = Localizer::getInstance()->getLanguage( $language );
@@ -345,7 +402,21 @@ class TimeValueFormatter extends DataValueFormatter {
 		// string (2147483647-01-01 00:00:0.0000000) at position 17 (0): Double
 		// time specification" for an annotation like [[Date::Jan 10000000000]]
 		try {
-			$localizedFormat = $intlTimeFormatter->getLocalizedFormat( $formatFlag ) .
+			$timeText = $intlTimeFormatter->getLocalizedFormat( $formatFlag );
+
+			if ( $deferLocalTime ) {
+				Outputs::requireResource( 'ext.smw.localtime' );
+				$timeText = Html::rawElement(
+					'time',
+					[
+						'datetime' => $this->getISO8601Date() . 'Z',
+						'class' => 'smw-localtime',
+					],
+					$timeText
+				);
+			}
+
+			$localizedFormat = $timeText .
 				$this->hintTimeCorrection( $intlTimeFormatter->hasLocalTimeCorrection() ) .
 				$this->hintCalendarModel( $dataItem );
 		} catch ( Exception ) {

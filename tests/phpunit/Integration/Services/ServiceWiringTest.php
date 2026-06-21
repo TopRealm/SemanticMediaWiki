@@ -7,7 +7,6 @@ use MediaWiki\MediaWikiServices;
 use MediaWiki\Request\FauxRequest;
 use MediaWiki\Title\Title;
 use MediaWikiIntegrationTestCase;
-use Onoi\Cache\Cache;
 use SMW\CacheFactory;
 use SMW\Connection\ConnectionManager;
 use SMW\ConstraintFactory;
@@ -48,6 +47,7 @@ use SMW\MediaWiki\Jobs\PropertyStatisticsRebuildJob;
 use SMW\MediaWiki\Jobs\RefreshJob;
 use SMW\MediaWiki\Jobs\UpdateDispatcherJob;
 use SMW\MediaWiki\Jobs\UpdateJob;
+use SMW\MediaWiki\LinkBatch;
 use SMW\MediaWiki\MediaWikiNsContentReader;
 use SMW\MediaWiki\MwCollaboratorFactory;
 use SMW\MediaWiki\PageCreator;
@@ -117,9 +117,9 @@ class ServiceWiringTest extends MediaWikiIntegrationTestCase {
 		return [
 			[ 'SMW.Settings', Settings::class ],
 			[ 'SMW.Store', Store::class ],
-			[ 'SMW.Cache', Cache::class ],
 			[ 'SMW.EntityCache', EntityCache::class ],
 			[ 'SMW.JobQueue', JobQueue::class ],
+			[ 'SMW.LinkBatch', LinkBatch::class ],
 			[ 'SMW.PermissionManager', PermissionManager::class ],
 			[ 'SMW.RevisionGuard', RevisionGuard::class ],
 			[ 'SMW.ConnectionManager', ConnectionManager::class ],

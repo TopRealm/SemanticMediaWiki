@@ -3,7 +3,6 @@
 use MediaWiki\Logger\LoggerFactory;
 use MediaWiki\MediaWikiServices;
 use MediaWiki\Parser\Parser;
-use Onoi\Cache\Cache;
 use Psr\Log\LoggerInterface;
 use SMW\CacheFactory;
 use SMW\Connection\ConnectionManager;
@@ -37,6 +36,7 @@ use SMW\MediaWiki\JobQueue;
 use SMW\MediaWiki\Jobs\ContentParserFactory;
 use SMW\MediaWiki\Jobs\PageUpdaterFactory;
 use SMW\MediaWiki\Jobs\ParserDataFactory;
+use SMW\MediaWiki\LinkBatch;
 use SMW\MediaWiki\MediaWikiNsContentReader;
 use SMW\MediaWiki\MwCollaboratorFactory;
 use SMW\MediaWiki\PageCreator;
@@ -67,6 +67,7 @@ use SMW\SQLStore\QueryDependencyLinksStoreFactory;
 use SMW\SQLStore\QueryEngine\FulltextSearchTableFactory;
 use SMW\Store;
 use SMW\StoreFactory;
+use Wikimedia\ObjectCache\BagOStuff;
 
 /**
  * Service wiring for SMW. Registered via `extension.json`'s
@@ -160,18 +161,10 @@ return [
 		return $instance;
 	},
 
-	'SMW.Cache' => static function ( MediaWikiServices $services ): Cache {
-		$servicesFactory = ServicesFactory::getInstance();
-
-		if ( $servicesFactory->hasTestOverride( 'Cache' ) ) {
-			return $servicesFactory->getCache();
-		}
-
-		// Mirror ServicesFactory::getCache() default-path behaviour: build a
-		// MediaWikiCompositeCache for the global $smwgMainCacheType. Callers
-		// that need a non-default cache type still go through
-		// CacheFactory::newMediaWikiCompositeCache() directly.
-		return ( new CacheFactory() )->newMediaWikiCompositeCache();
+	'SMW.ObjectCache' => static function ( MediaWikiServices $services ): BagOStuff {
+		// MediaWiki-native BagOStuff over the configured $smwgMainCacheType,
+		// resolved through ServicesFactory.
+		return ServicesFactory::getInstance()->getObjectCache();
 	},
 
 	'SMW.EntityCache' => static function ( MediaWikiServices $services ): EntityCache {
@@ -182,7 +175,7 @@ return [
 		}
 
 		return new EntityCache(
-			$servicesFactory->getCache()
+			$servicesFactory->getObjectCache()
 		);
 	},
 
@@ -197,6 +190,18 @@ return [
 		// resolving it through ServicesFactory honours the testOverrides map.
 		return new JobQueue(
 			$servicesFactory->getJobQueueGroup()
+		);
+	},
+
+	'SMW.LinkBatch' => static function ( MediaWikiServices $services ): LinkBatch {
+		$servicesFactory = ServicesFactory::getInstance();
+
+		if ( $servicesFactory->hasTestOverride( 'LinkBatch' ) ) {
+			return $servicesFactory->getLinkBatch();
+		}
+
+		return new LinkBatch(
+			$services->getLinkBatchFactory()->newLinkBatch()
 		);
 	},
 
@@ -416,7 +421,7 @@ return [
 		return new TaskFactory(
 			$servicesFactory->getStore(),
 			$servicesFactory->getJobQueue(),
-			$servicesFactory->getCache(),
+			$servicesFactory->getObjectCache(),
 			$servicesFactory->getSettings(),
 			$servicesFactory->getJobFactory(),
 			$services->getHookContainer()
@@ -591,12 +596,6 @@ return [
 	},
 
 	'SMW.Logger' => static function ( MediaWikiServices $services ): LoggerInterface {
-		$servicesFactory = ServicesFactory::getInstance();
-
-		if ( $servicesFactory->hasTestOverride( 'Logger' ) ) {
-			return $servicesFactory->getLogger();
-		}
-
 		return LoggerFactory::getInstance( 'smw' );
 	},
 
@@ -725,7 +724,7 @@ return [
 		$servicesFactory = ServicesFactory::getInstance();
 
 		return new PostProcHandlerFactory(
-			$servicesFactory->getCache(),
+			$servicesFactory->getObjectCache(),
 			$servicesFactory->getSettings()
 		);
 	},
@@ -820,7 +819,7 @@ return [
 
 		$hierarchyLookup = new HierarchyLookup(
 			$servicesFactory->getStore(),
-			$servicesFactory->getCache()
+			$servicesFactory->getObjectCache()
 		);
 
 		$hierarchyLookup->setLogger(

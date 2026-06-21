@@ -2,22 +2,22 @@
 
 namespace SMW\SQLStore\EntityStore;
 
-use Onoi\Cache\Cache;
+use SMW\Cache\InMemoryLruCache;
 use Wikimedia\Stats\StatsFactory;
 
 /**
  * Decorator that emits per-event hit/miss counters and a current-size gauge to
- * a `StatsFactory` for an underlying `Cache` instance. Used to instrument the
- * request-scoped LRU pools backing entity ID lookups so operators can see
+ * a `StatsFactory` for an underlying in-process LRU cache. Used to instrument
+ * the request-scoped pools backing entity ID lookups so operators can see
  * cache effectiveness in their existing metrics tooling.
  *
  * @license GPL-2.0-or-later
  * @since 7.0.0
  */
-class InstrumentedCache implements Cache {
+class InstrumentedCache {
 
 	public function __construct(
-		private readonly Cache $inner,
+		private readonly InMemoryLruCache $inner,
 		private readonly StatsFactory $statsFactory,
 		private readonly string $pool,
 	) {
@@ -43,10 +43,9 @@ class InstrumentedCache implements Cache {
 		return $this->inner->contains( $id );
 	}
 
-	public function save( $id, $data, $ttl = 0 ) {
-		$result = $this->inner->save( $id, $data, $ttl );
+	public function save( $id, $data, $ttl = 0 ): void {
+		$this->inner->save( $id, $data, $ttl );
 		$this->updateSizeGauge();
-		return $result;
 	}
 
 	public function delete( $id ) {
@@ -57,10 +56,6 @@ class InstrumentedCache implements Cache {
 
 	public function getStats() {
 		return $this->inner->getStats();
-	}
-
-	public function getName() {
-		return $this->inner->getName();
 	}
 
 	private function updateSizeGauge(): void {

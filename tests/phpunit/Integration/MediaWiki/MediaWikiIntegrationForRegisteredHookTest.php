@@ -5,6 +5,7 @@ namespace SMW\Tests\Integration\MediaWiki;
 use MediaWiki\Context\RequestContext;
 use MediaWiki\MediaWikiServices;
 use SMW\DataItems\WikiPage;
+use SMW\MediaWiki\Hooks\ArticlePurge;
 use SMW\ParserData;
 use SMW\Services\ServicesFactory as ApplicationFactory;
 use SMW\Tests\SMWIntegrationTestCase;
@@ -66,20 +67,10 @@ class MediaWikiIntegrationForRegisteredHookTest extends SMWIntegrationTestCase {
 	}
 
 	public function testPagePurge() {
-		$cacheFactory = $this->applicationFactory->newCacheFactory();
-		$cache = $cacheFactory->newFixedInMemoryCache();
-
-		$this->applicationFactory->registerObject( 'Cache', $cache );
-
-		// reseatDeclarativeHandlers() in setUp() already built ArticlePurge
-		// with the default Cache. Reset the cached SMW.Cache MediaWikiServices
-		// entry and reseat so the next ObjectFactory pass resolves the
-		// test's fixed-memory cache via the service wiring's hasTestOverride
-		// branch.
-		MediaWikiServices::getInstance()->resetServiceForTesting( 'SMW.Cache' );
-		( new SMWDeclarativeHookReseater(
-			MediaWikiServices::getInstance()->getHookContainer()
-		) )->reseatDeclarativeHandlers();
+		// ArticlePurge writes the purge marker through SMW.ObjectCache, i.e.
+		// ServicesFactory::getObjectCache(); read it back from that same
+		// instance rather than an injected Cache override.
+		$cache = $this->applicationFactory->getObjectCache();
 
 		$this->title = MediaWikiServices::getInstance()->getTitleFactory()->newFromText( __METHOD__ );
 
@@ -89,14 +80,14 @@ class MediaWikiIntegrationForRegisteredHookTest extends SMWIntegrationTestCase {
 			->createPage( $this->title )
 			->doEdit( '[[Has function hook test::page purge]]' );
 
-		$key = $cacheFactory->getPurgeCacheKey( $this->title->getArticleID() );
+		$key = smwfCacheKey( ArticlePurge::CACHE_NAMESPACE, $this->title->getArticleID() );
 
 		$pageCreator
 			->getPage()
 			->doPurge();
 
 		$this->assertTrue(
-			$cache->fetch( $key )
+			$cache->get( $key )
 		);
 	}
 

@@ -6,7 +6,6 @@ use MediaWiki\MediaWikiServices;
 use MediaWikiIntegrationTestCase;
 use SMW\DataValueFactory;
 use SMW\Export\Exporter;
-use SMW\MediaWiki\LinkBatch;
 use SMW\PropertyRegistry;
 use SMW\Query\QueryProcessor;
 use SMW\Services\ServicesFactory;
@@ -37,11 +36,6 @@ abstract class SMWIntegrationTestCase extends MediaWikiIntegrationTestCase {
 
 		// Load default settings specific to SMW
 		TestEnvironment::loadDefaultSettings( [ 'smwgQEqualitySupport' ] );
-
-		// Don't use temporary tables to avoid "Error: 1137 Can't reopen table" on mysql.
-		// Must be set before maybeSetupDB() reads this flag.
-		// https://github.com/SemanticMediaWiki/SemanticMediaWiki/pull/80/commits/565061cd0b9ccabe521f0382938d013a599e4673
-		static::setCliArg( 'use-normal-tables', true );
 	}
 
 	/**
@@ -82,7 +76,6 @@ abstract class SMWIntegrationTestCase extends MediaWikiIntegrationTestCase {
 	  * Reset Semantic MediaWiki-related services and caches.
 	  */
 	private function resetSMWServices(): void {
-		LinkBatch::reset();
 		DataValueFactory::getInstance()->clear();
 		Exporter::clear();
 		CachingSemanticDataLookup::clear();
@@ -95,13 +88,10 @@ abstract class SMWIntegrationTestCase extends MediaWikiIntegrationTestCase {
 	 * Initialize SMW test environment configuration.
 	 */
 	private function initializeTestEnvironment(): void {
-		$fixedInMemoryLruCache = ServicesFactory::getInstance()->create( 'FixedInMemoryLruCache' );
-
 		$this->testEnvironment = new TestEnvironment();
 		$this->testEnvironment->addConfiguration( 'smwgEnabledDeferredUpdate', false );
 		$this->testEnvironment->disableSoftwareChangeTags();
 		$this->testEnvironment->registerObject( 'Store', $this->getStore() );
-		$this->testEnvironment->registerObject( 'Cache', $fixedInMemoryLruCache );
 
 		PropertyRegistry::clear();
 
@@ -134,14 +124,6 @@ abstract class SMWIntegrationTestCase extends MediaWikiIntegrationTestCase {
 		if ( $this->testEnvironment !== null ) {
 			$this->testEnvironment->tearDown();
 		}
-
-		// Commit or rollback any open transactions from page deletions
-		// (flushPages) before MW's tearDown truncates tables. Without this,
-		// delete transactions can hold row locks that block TRUNCATE,
-		// causing "Lock wait timeout" errors.
-		MediaWikiServices::getInstance()
-			->getDBLoadBalancerFactory()
-			->commitPrimaryChanges( __METHOD__ );
 
 		parent::tearDown();
 	}

@@ -4,6 +4,7 @@ namespace SMW\MediaWiki\Search;
 
 use SearchEngine;
 use SMW\Formatters\InfoLink;
+use Wikimedia\Rdbms\IConnectionProvider;
 
 /**
  * Facade to the MediaWiki `SearchEngine` which doesn't allow any factory
@@ -25,7 +26,7 @@ class ExtendedSearchEngine extends SearchEngine {
 	 *
 	 * @since 3.1
 	 */
-	public function __construct( $connection = null ) {
+	public function __construct( ?IConnectionProvider $connection = null ) {
 		// It is common practice to avoid construction work in the constructor
 		// but we are unable to define a factory or callable and this is the only
 		// place to create an instance.
@@ -41,6 +42,17 @@ class ExtendedSearchEngine extends SearchEngine {
 
 		$this->extendedSearch->setPrefix( $this->prefix );
 		$this->extendedSearch->setNamespaces( $this->namespaces );
+	}
+
+	/**
+	 * Whether the given `$wgSearchType` value selects this extended search
+	 * engine, accepting both the canonical class name and the deprecated
+	 * `SMWSearch` alias.
+	 *
+	 * @since 7.0.0
+	 */
+	public static function isActiveSearchType( ?string $type ): bool {
+		return $type === self::class || $type === 'SMWSearch';
 	}
 
 	/**

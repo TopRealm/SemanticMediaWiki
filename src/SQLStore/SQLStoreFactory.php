@@ -159,27 +159,27 @@ class SQLStoreFactory {
 	/**
 	 * @since 2.2
 	 *
-	 * @return ConceptCache
+	 * @return ConceptMaterializer
 	 */
-	public function newMasterConceptCache(): ConceptCache {
-		$conceptCache = new ConceptCache(
+	public function newMasterConceptCache(): ConceptMaterializer {
+		$conceptMaterializer = new ConceptMaterializer(
 			$this->store,
 			$this->queryEngineFactory->newConceptQuerySegmentBuilder()
 		);
 
-		$conceptCache->setUpperLimit(
+		$conceptMaterializer->setUpperLimit(
 			$GLOBALS['smwgQMaxLimit']
 		);
 
-		return $conceptCache;
+		return $conceptMaterializer;
 	}
 
 	/**
 	 * @since 2.2
 	 *
-	 * @return ConceptCache
+	 * @return ConceptMaterializer
 	 */
-	public function newSlaveConceptCache(): ConceptCache {
+	public function newSlaveConceptCache(): ConceptMaterializer {
 		return $this->newMasterConceptCache();
 	}
 
@@ -295,7 +295,7 @@ class SQLStoreFactory {
 
 		$cachedListLookup = new CachedListLookup(
 			$listLookup,
-			$cacheFactory->newMediaWikiCompositeCache( $cacheFactory->getMainCacheType() ),
+			ApplicationFactory::getInstance()->getObjectCache(),
 			$cacheOptions
 		);
 
@@ -719,7 +719,8 @@ class SQLStoreFactory {
 
 		$cacheWarmer = new CacheWarmer(
 			$this->store,
-			$idCacheManager
+			$idCacheManager,
+			$applicationFactory->getLinkBatch()
 		);
 
 		$cacheWarmer->setDisplayTitleFinder(
@@ -833,8 +834,7 @@ class SQLStoreFactory {
 		);
 
 		$cachingSemanticDataLookup = new CachingSemanticDataLookup(
-			$semanticDataLookup,
-			ApplicationFactory::getInstance()->getCache()
+			$semanticDataLookup
 		);
 
 		return $cachingSemanticDataLookup;
@@ -1059,7 +1059,8 @@ class SQLStoreFactory {
 		return new PrefetchItemLookup(
 			$this->store,
 			$this->newSemanticDataLookup(),
-			$this->newPropertySubjectsLookup()
+			$this->newPropertySubjectsLookup(),
+			ApplicationFactory::getInstance()->getLinkBatch()
 		);
 	}
 

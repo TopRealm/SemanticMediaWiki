@@ -2,8 +2,7 @@
 
 namespace SMW;
 
-use Onoi\Cache\Cache;
-use SMW\Services\ServicesFactory as ApplicationFactory;
+use SMW\Cache\InMemoryLruCache;
 use SMW\Utils\StatsFormatter;
 
 /**
@@ -34,18 +33,7 @@ class InMemoryPoolCache {
 
 	private static ?InMemoryPoolCache $instance = null;
 
-	private CacheFactory $cacheFactory;
-
 	private array $poolCacheList = [];
-
-	/**
-	 * @since 2.3
-	 *
-	 * @param CacheFactory $cacheFactory
-	 */
-	public function __construct( CacheFactory $cacheFactory ) {
-		$this->cacheFactory = $cacheFactory;
-	}
 
 	/**
 	 * @since 2.3
@@ -54,7 +42,7 @@ class InMemoryPoolCache {
 	 */
 	public static function getInstance(): InMemoryPoolCache {
 		if ( self::$instance === null ) {
-			self::$instance = new self( ApplicationFactory::getInstance()->newCacheFactory() );
+			self::$instance = new self();
 		}
 
 		return self::$instance;
@@ -97,11 +85,11 @@ class InMemoryPoolCache {
 	 * @param string $poolCacheId
 	 * @param int $cacheSize
 	 *
-	 * @return Cache
+	 * @return InMemoryLruCache
 	 */
 	public function getPoolCacheById( $poolCacheId, $cacheSize = 500 ) {
 		if ( !isset( $this->poolCacheList[$poolCacheId] ) ) {
-			$this->poolCacheList[$poolCacheId] = $this->cacheFactory->newFixedInMemoryCache( $cacheSize );
+			$this->poolCacheList[$poolCacheId] = new InMemoryLruCache( $cacheSize );
 		}
 
 		return $this->poolCacheList[$poolCacheId];

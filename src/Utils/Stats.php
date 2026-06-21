@@ -2,8 +2,8 @@
 
 namespace SMW\Utils;
 
-use Onoi\Cache\Cache;
 use SMW\Services\ServicesFactory as ApplicationFactory;
+use Wikimedia\ObjectCache\BagOStuff;
 
 /**
  * Collect statistics in a provisional schema-free storage that depends on the
@@ -42,20 +42,13 @@ class Stats {
 	 */
 	private $stats = [];
 
-	/**
-	 * Identifies an update fingerprint to compare invoked deferred updates
-	 * against each other and filter those with the same print to avoid recording
-	 * duplicate stats.
-	 */
-	private ?string $fingerprint = null;
-
 	private array $operations = [];
 
 	/**
 	 * @since 2.5
 	 */
 	public function __construct(
-		private readonly Cache $cache,
+		private readonly BagOStuff $cache,
 		private $id,
 	) {
 		$this->initRecord();
@@ -72,7 +65,6 @@ class Stats {
 	 * @since 3.0
 	 */
 	public function initRecord(): void {
-		$this->fingerprint = $this->id . uniqid();
 	}
 
 	/**
@@ -90,7 +82,7 @@ class Stats {
 	 * @return array
 	 */
 	public function getStats(): array {
-		$stats = $this->cache->fetch( $this->makeCacheKey( $this->id ) );
+		$stats = $this->cache->get( $this->makeCacheKey( $this->id ) );
 		if ( $stats === false ) {
 			return [];
 		}
@@ -158,7 +150,7 @@ class Stats {
 			return;
 		}
 
-		$container = $this->cache->fetch( $this->makeCacheKey( $this->id ) );
+		$container = $this->cache->get( $this->makeCacheKey( $this->id ) );
 
 		if ( $container === false || $container === null ) {
 			$container = [];
@@ -190,7 +182,7 @@ class Stats {
 			$container[$key] = $value;
 		}
 
-		$this->cache->save( $this->makeCacheKey( $this->id ), $container );
+		$this->cache->set( $this->makeCacheKey( $this->id ), $container );
 		$this->stats = [];
 	}
 
@@ -219,10 +211,6 @@ class Stats {
 
 		$deferredUpdate->setOrigin( $fname );
 		$deferredUpdate->waitOnTransactionIdle();
-
-		$deferredUpdate->setFingerprint(
-			$fname . $this->fingerprint
-		);
 
 		$deferredUpdate->markAsPending( $asPending );
 		$deferredUpdate->pushUpdate();

@@ -2,13 +2,9 @@
 
 namespace SMW;
 
-use MediaWiki\Title\Title;
 use MediaWiki\WikiMap\WikiMap;
-use ObjectCache;
-use Onoi\BlobStore\BlobStore;
-use Onoi\Cache\Cache;
-use Onoi\Cache\CacheFactory as OnoiCacheFactory;
 use RuntimeException;
+use SMW\Query\Cache\QueryResultStore;
 use SMW\Services\ServicesFactory as ApplicationFactory;
 use stdClass;
 
@@ -56,19 +52,6 @@ class CacheFactory {
 	/**
 	 * @since 2.2
 	 *
-	 * @param Title|int|string $key
-	 */
-	public static function getPurgeCacheKey( $key ): string {
-		if ( $key instanceof Title ) {
-			$key = $key->getArticleID();
-		}
-
-		return self::getCachePrefix() . ':smw:arc:' . md5( $key ?? '' );
-	}
-
-	/**
-	 * @since 2.2
-	 *
 	 * @throws RuntimeException
 	 */
 	public function newCacheOptions( array $cacheOptions ): stdClass {
@@ -80,82 +63,16 @@ class CacheFactory {
 	}
 
 	/**
-	 * @since 2.2
-	 *
-	 * @param int $cacheSize
-	 *
-	 * @return Cache
-	 */
-	public function newFixedInMemoryCache( $cacheSize = 500 ) {
-		return OnoiCacheFactory::getInstance()->newFixedInMemoryLruCache( $cacheSize );
-	}
-
-	/**
-	 * @since 2.2
-	 *
-	 * @return Cache
-	 */
-	public function newNullCache() {
-		return OnoiCacheFactory::getInstance()->newNullCache();
-	}
-
-	/**
-	 * @since 2.2
-	 *
-	 * @param int|string|null $mediaWikiCacheType
-	 *
-	 * @return Cache
-	 */
-	public function newMediaWikiCompositeCache( $mediaWikiCacheType = null ) {
-		$compositeCache = OnoiCacheFactory::getInstance()->newCompositeCache( [
-			$this->newFixedInMemoryCache( 500 ),
-			$this->newMediaWikiCache( $mediaWikiCacheType )
-		] );
-
-		return $compositeCache;
-	}
-
-	/**
-	 * @since 2.5
-	 *
-	 * @param int|string|null $mediaWikiCacheType
-	 *
-	 * @return Cache
-	 */
-	public function newMediaWikiCache( $mediaWikiCacheType = null ) {
-		$mediaWikiCache = ObjectCache::getInstance(
-			( $mediaWikiCacheType === null ? $this->getMainCacheType() : $mediaWikiCacheType )
-		);
-
-		return OnoiCacheFactory::getInstance()->newMediaWikiCache( $mediaWikiCache );
-	}
-
-	/**
-	 * @since 2.5
-	 *
-	 * @param int|null $cacheType
-	 *
-	 * @return Cache
-	 */
-	public function newCacheByType( $cacheType = null ) {
-		if ( $cacheType === CACHE_NONE || $cacheType === null ) {
-			return $this->newNullCache();
-		}
-
-		return $this->newMediaWikiCache( $cacheType );
-	}
-
-	/**
-	 * @since 2.4
+	 * @since 7.0.0
 	 *
 	 * @param string $namespace
 	 * @param string|int|null $cacheType
 	 * @param int $cacheLifetime
 	 *
-	 * @return BlobStore
+	 * @return QueryResultStore
 	 */
-	public function newBlobStore( $namespace, $cacheType = null, $cacheLifetime = 0 ) {
-		return ApplicationFactory::getInstance()->create( 'BlobStore', $namespace, $cacheType, $cacheLifetime );
+	public function newQueryResultStore( $namespace, $cacheType = null, $cacheLifetime = 0 ) {
+		return ApplicationFactory::getInstance()->create( 'QueryResultStore', $namespace, $cacheType, $cacheLifetime );
 	}
 
 }

@@ -352,7 +352,7 @@ notices" panel. Extensions populate this array (keyed by section name) to
 inform administrators about settings or features planned for removal or
 already removed in the running version.
 
-**Since:** 7.0.0
+**Since:** 3.2.0
 **Default:** `[]`
 
 ## $smwgDetectOutdatedData
@@ -730,7 +730,7 @@ Deprecated in 7.x, removed in 8.0:
 
 ## $smwgFallbackSearchType
 
-Search engine class to fall back to when SMWSearch cannot parse a query;
+Search engine class to fall back to when SMW\MediaWiki\Search\ExtendedSearchEngine cannot parse a query;
 `null` uses the database default (e.g. `SearchMySQL`, `SearchPostgres`, or
 `SearchOracle`). Set to a fully-qualified class name to override with a
 custom search engine.
@@ -1900,9 +1900,11 @@ injection container.
 
 ## $smwgSetParserCacheKeys
 
-Session keys added to the parser cache key, each causing additional cache
-fragmentation. Each listed key produces a separate cache entry per distinct
-value of that key.
+Controls whether the parser cache is fragmented by the viewer's interface
+language. The only recognized key is `userlang` (the default), which varies the
+cache for language-dependent output such as errors and localized tooltips. Set
+to `[]` to disable this; on a multilingual wiki that can serve such output in
+the wrong language.
 
 **Since:** 5.1
 **Default:** `["userlang"]`
@@ -2113,7 +2115,7 @@ continue to work without a deprecation notice. The mapping is:
 
 ## $smwgSupportSectionTag
 
-When `true`, enables `<section>…</section>` tag support.
+When `true`, enables `<smwsection>…</smwsection>` tag support.
 
 **Since:** 3.0
 **Default:** `true`

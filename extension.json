@@ -1,6 +1,6 @@
 {
 	"name": "SemanticMediaWiki",
-	"version": "7.0.0-alpha",
+	"version": "7.1.0-alpha",
 	"author": [
 		"[https://korrekt.org Markus Krötzsch]",
 		"[https://EntropyWins.wtf/mediawiki Jeroen De Dauw]",
@@ -35,12 +35,12 @@
 		"CanonicalNamespaces": "SemanticMediaWiki.CanonicalNamespaces",
 		"ParserAfterTidy": "SemanticMediaWiki.ParserAfterTidy",
 		"ParserClearState": "SemanticMediaWiki.ParserClearState",
-		"ParserOptionsRegister": "SemanticMediaWiki.ParserOptionsRegister",
 		"ParserFirstCallInit": "SemanticMediaWiki.ParserFirstCallInit",
 		"InternalParseBeforeLinks": "SemanticMediaWiki.InternalParseBeforeLinks",
 		"RejectParserCacheValue": "SemanticMediaWiki.RejectParserCacheValue",
 		"SkinAfterContent": "SemanticMediaWiki.SkinAfterContent",
 		"OutputPageParserOutput": "SemanticMediaWiki.OutputPageParserOutput",
+		"ParserOutputPostCacheTransform": "SemanticMediaWiki.ParserOutputPostCacheTransform",
 		"OutputPageCheckLastModified": "SemanticMediaWiki.OutputPageCheckLastModified",
 		"BeforePageDisplay": "SemanticMediaWiki.BeforePageDisplay",
 		"BeforeDisplayNoArticleText": "SemanticMediaWiki.BeforeDisplayNoArticleText",
@@ -95,7 +95,7 @@
 			"class": "SMW\\MediaWiki\\Hooks\\ParserAfterTidy",
 			"services": [
 				"SMW.NamespaceExaminer",
-				"SMW.Cache",
+				"SMW.ObjectCache",
 				"SMW.ApplicationFactory",
 				"HookContainer",
 				"SMW.Settings",
@@ -105,9 +105,6 @@
 		},
 		"SemanticMediaWiki.ParserClearState": {
 			"class": "SMW\\MediaWiki\\Hooks\\ParserClearState"
-		},
-		"SemanticMediaWiki.ParserOptionsRegister": {
-			"class": "SMW\\MediaWiki\\Hooks\\ParserOptionsRegister"
 		},
 		"SemanticMediaWiki.ParserFirstCallInit": {
 			"class": "SMW\\MediaWiki\\Hooks\\ParserFirstCallInit",
@@ -152,6 +149,9 @@
 				"SMW.InTextAnnotationParserFactory",
 				"SMW.Logger"
 			]
+		},
+		"SemanticMediaWiki.ParserOutputPostCacheTransform": {
+			"class": "SMW\\MediaWiki\\Hooks\\ParserOutputPostCacheTransform"
 		},
 		"SemanticMediaWiki.OutputPageCheckLastModified": {
 			"class": "SMW\\MediaWiki\\Hooks\\OutputPageCheckLastModified"
@@ -201,7 +201,7 @@
 			"class": "SMW\\MediaWiki\\Hooks\\ArticlePurge",
 			"services": [
 				"SMW.Store",
-				"SMW.Cache",
+				"SMW.ObjectCache",
 				"SMW.Settings",
 				"SMW.EventDispatcher"
 			]
@@ -453,7 +453,7 @@
 		},
 		"smwbrowse": {
 			"class": "SMW\\MediaWiki\\Api\\Browse",
-			"services": [ "SMW.Store", "SMW.Settings", "SMW.Cache", "TitleFactory" ]
+			"services": [ "SMW.Store", "SMW.Settings", "SMW.ObjectCache", "TitleFactory" ]
 		},
 		"ask": {
 			"class": "SMW\\MediaWiki\\Api\\Ask",
@@ -517,7 +517,8 @@
 		"SMW\\SemanticData": "src/DataModel/SemanticData.php",
 		"SMW\\Subobject": "src/DataModel/Subobject.php",
 		"SMW\\SQLStore\\Lookup\\ListLookup": "src/Lookup/ListLookup.php",
-		"SMW\\SQLStore\\Lookup\\CachedListLookup": "src/Lookup/CachedListLookup.php"
+		"SMW\\SQLStore\\Lookup\\CachedListLookup": "src/Lookup/CachedListLookup.php",
+		"SMW\\SQLStore\\ConceptCache": "src/SQLStore/ConceptMaterializer.php"
 	},
 	"namespaces": [
 		{ "id": 102, "constant": "SMW_NS_PROPERTY",      "name": "Property",        "content": true },
@@ -595,14 +596,17 @@
 				"tests/qunit/smw/data/ext.smw.dataValue.quantity.test.js",
 				"tests/qunit/smw/data/ext.smw.data.test.js",
 				"tests/qunit/smw/api/ext.smw.api.test.js",
-				"tests/qunit/smw/query/ext.smw.query.test.js"
+				"tests/qunit/smw/query/ext.smw.query.test.js",
+				"tests/qunit/smw/util/ext.smw.localtime.test.js"
 			],
 			"dependencies": [
+				"mediawiki.language.months",
 				"ext.smw",
 				"ext.smw.tooltip",
 				"ext.smw.query",
 				"ext.smw.data",
-				"ext.smw.api"
+				"ext.smw.api",
+				"ext.smw.localtime"
 			],
 			"position": "top",
 			"localBasePath": "",
@@ -716,7 +720,7 @@
 			"class": "SMW\\MediaWiki\\Jobs\\ChangePropagationDispatchJob",
 			"services": [
 				"SMW.Store",
-				"SMW.Cache",
+				"SMW.ObjectCache",
 				"SMW.PropertySpecificationLookup",
 				"SMW.IteratorFactory",
 				"SMW.JobFactory"
@@ -736,7 +740,7 @@
 		},
 		"smw.elasticIndexerRecovery": {
 			"class": "SMW\\Elastic\\Jobs\\IndexerRecoveryJob",
-			"services": [ "SMW.Store", "SMW.Cache", "SMW.JobFactory" ]
+			"services": [ "SMW.Store", "SMW.ObjectCache", "SMW.JobFactory" ]
 		},
 		"smw.elasticFileIngest": {
 			"class": "SMW\\Elastic\\Jobs\\FileIngestJob",
@@ -811,6 +815,14 @@
 				"mediawiki.util"
 			]
 		},
+		"ext.smw.localtime": {
+			"scripts": [
+				"smw/util/ext.smw.localtime.js"
+			],
+			"dependencies": [
+				"mediawiki.user"
+			]
+		},
 		"ext.smw.api": {
 			"scripts": [
 				"smw/data/ext.smw.dataItem.wikiPage.js",
@@ -829,6 +841,7 @@
 				"mediawiki.Title",
 				"mediawiki.storage",
 				"mediawiki.util",
+				"mediawiki.language.months",
 				"ext.smw",
 				"ext.smw.query"
 			]
@@ -1884,7 +1897,7 @@
 		},
 		"SupportSectionTag": {
 			"value": true,
-			"description": "When `true`, enables `<section>…</section>` tag support."
+			"description": "When `true`, enables `<smwsection>…</smwsection>` tag support."
 		},
 		"Translate": {
 			"value": false,
