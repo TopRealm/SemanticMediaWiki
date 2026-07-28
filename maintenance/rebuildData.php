@@ -12,6 +12,7 @@ use SMW\Setup;
 use SMW\Store;
 use SMW\StoreFactory;
 use SMW\Utils\CliMsgFormatter;
+use SMW\Utils\PeriodicStatsFlusher;
 
 /**
  * Load the required class
@@ -168,6 +169,10 @@ class rebuildData extends Maintenance {
 		$dataRebuilder = $maintenanceFactory->newDataRebuilder(
 			$store,
 			[ $this, 'reportMessage' ]
+		);
+
+		$dataRebuilder->setStatsFlusher(
+			PeriodicStatsFlusher::newFromGlobalState()
 		);
 
 		if ( $this->hasOption( 'f' ) ) {

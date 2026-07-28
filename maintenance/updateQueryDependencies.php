@@ -10,6 +10,7 @@ use SMW\Services\ServicesFactory as ApplicationFactory;
 use SMW\Setup;
 use SMW\SQLStore\SQLStore;
 use SMW\Store;
+use SMW\Utils\PeriodicStatsFlusher;
 
 $basePath = getenv( 'MW_INSTALL_PATH' );
 
@@ -177,8 +178,11 @@ class updateQueryDependencies extends Maintenance {
 		$this->reportMessage( "\n   ... found $expected entities ..." );
 		$this->reportMessage( "\n" );
 
+		$statsFlusher = PeriodicStatsFlusher::newFromGlobalState();
+
 		$titleFactory = $this->getServiceContainer()->getTitleFactory();
 		foreach ( $res as $row ) {
+			$statsFlusher->tick();
 			$i++;
 
 			$this->reportMessage(

@@ -1,0 +1,30 @@
+# Semantic MediaWiki 7.2.1
+
+Released on TBD.
+
+This is a [patch release](../RELEASE-POLICY.md). Thus, it contains only bug fixes, no new features, and no breaking changes.
+
+Like SMW 7.2.0, this version is compatible with MediaWiki 1.43 up to 1.46 and PHP 8.1 up to 8.5.
+For more detailed information, see the [compatibility matrix](../COMPATIBILITY.md#compatibility).
+
+## Bug fixes
+
+* Fixed property and category pages sometimes reporting the wrong Semantic MediaWiki protection status, where a page's change-propagation lock and its "Is edit protected" status could be confused for one another ([#4344](https://github.com/SemanticMediaWiki/SemanticMediaWiki/issues/4344))
+* Fixed property and category pages sometimes remaining permanently locked for a change propagation update even when no such update was pending, leaving them uneditable; affected pages are editable again, and routine category changes such as setting a parent category no longer trigger the lock ([#4344](https://github.com/SemanticMediaWiki/SemanticMediaWiki/issues/4344))
+* Fixed change propagation failing to complete for a property or category connected to a very large number of pages, where selecting the affected pages could exhaust the available memory ([#4344](https://github.com/SemanticMediaWiki/SemanticMediaWiki/issues/4344))
+
+## Upgrading
+
+No need to run "update.php" or any other migration scripts.
+
+**Get the new version via Composer:**
+
+* Step 1: if you are upgrading from SMW older than 7.0.0, ensure the SMW version in `composer.local.json` is `^7.2.1`
+* Step 2: run composer in your MediaWiki directory: `composer update --no-dev --optimize-autoloader`
+
+**Get the new version via Git:**
+
+This is only for those who have installed SMW via Git.
+
+* Step 1: do a `git pull` in the SemanticMediaWiki directory
+* Step 2: run `composer update --no-dev --optimize-autoloader` in the MediaWiki directory
