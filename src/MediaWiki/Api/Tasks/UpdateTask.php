@@ -22,6 +22,17 @@ class UpdateTask extends Task {
 	}
 
 	/**
+	 * Forces a store update for the subject, so the caller must be authorized
+	 * to edit that specific page rather than merely holding a wiki-wide right.
+	 * The legitimate post-edit flow acts on the page the caller just saved.
+	 *
+	 * @since 7.3.1
+	 */
+	public function getAuthorizationSubject( array $parameters ): ?string {
+		return $parameters['subject'] ?? '';
+	}
+
+	/**
 	 * @since 3.1
 	 */
 	public function process( array $parameters ): array {

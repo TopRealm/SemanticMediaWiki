@@ -47,6 +47,15 @@ class MaintenanceTaskHandler extends TaskHandler implements ActionableTask {
 	}
 
 	/**
+	 * @since 7.3.1
+	 *
+	 * {@inheritDoc}
+	 */
+	public function changesState(): bool {
+		return true;
+	}
+
+	/**
 	 * @since 3.1
 	 *
 	 * {@inheritDoc}
@@ -182,7 +191,7 @@ class MaintenanceTaskHandler extends TaskHandler implements ActionableTask {
 			$scripts[$section][] = Html::rawElement(
 				'a',
 				[
-					'href' => $this->msg( [ 'smw-helplink', $name ] )
+					'href' => $this->msg( [ 'smw-helplink-maintenance', $name ] )
 				],
 				$name
 			) . ":&nbsp;" . $description;

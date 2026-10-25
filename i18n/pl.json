@@ -33,7 +33,7 @@
 			"아라"
 		]
 	},
-	"smw-desc": "Poprawia dostępność wiki zarówno dla automatów jak i ludzi ([https://www.semantic-mediawiki.org/wiki/Help:User_manual dokumentacja online])",
+	"smw-desc": "Poprawia dostępność wiki zarówno dla automatów, jak i ludzi ([https://www.semantic-mediawiki.org/wiki/Help:User_manual dokumentacja online])",
 	"smw-error": "Błąd",
 	"smw-upgrade-error": "[https://www.semantic-mediawiki.org/ Semantic MediaWiki] zostało zainstalowane i włączone, ale brakuje odpowiedniego [https://www.semantic-mediawiki.org/wiki/Help:Upgrade klucza aktualizacji].",
 	"smw-upgrade-release": "Wydanie",
@@ -277,7 +277,7 @@
 	"smw-missingredirects-list": "Strony z brakującymi adnotacjami",
 	"smw_sbv_docu": "Wyszukiwanie wszystkich stron, które mają dany atrybut i wartość.",
 	"smw_sbv_novalue": "Wpisz wartość, lub zobacz wszystkie wartości atrybutów dla $1.",
-	"smw_sbv_displayresultfuzzy": "Lista wszystkich stron, które posiadają właściwość „$1” o wartości „$2”.\nPonieważ znaleziono tylko kilka wyników, pokazano również wyniki podobne.",
+	"smw_sbv_displayresultfuzzy": "Lista wszystkich stron, które mają właściwość „$1” o wartości „$2”.\nPonieważ znaleziono tylko kilka wyników, pokazano również wyniki podobne.",
 	"smw_sbv_property": "Atrybut",
 	"smw_sbv_value": "Wartość:",
 	"smw_sbv_submit": "Znajdź wyniki",

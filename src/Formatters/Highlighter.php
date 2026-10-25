@@ -71,6 +71,25 @@ class Highlighter {
 	 */
 	const TYPE_REFERENCE = 10;
 
+	/**
+	 * Upper bound for the `title` attribute. A browser truncates the native
+	 * tooltip well before this, while an attribute that grows with the content
+	 * makes MediaWiki's HTML tidy step exhaust `pcre.backtrack_limit` and abort
+	 * the whole page (#7076).
+	 */
+	private const MAX_TITLE_LENGTH = 1024;
+
+	/**
+	 * Upper bound for the `data-content` attribute. The attribute is what keeps
+	 * the surrounding page parse away from the rendered content (#5494), but it
+	 * is also what makes MediaWiki's HTML tidy step exhaust
+	 * `pcre.backtrack_limit` once it grows with that content (#7076). Past the
+	 * bound the content goes back into the tooltip text node, which the tidy
+	 * step does not tokenize: a pathologically long description then renders
+	 * the way it did before #5494 rather than taking the whole page down.
+	 */
+	private const MAX_DATA_CONTENT_LENGTH = 65536;
+
 	private ?array $options = null;
 
 	/**
@@ -226,6 +245,8 @@ class Highlighter {
 			$this->options['content'] = str_replace( [ "\n" ], [ '' ], $this->options['content'] );
 		}
 
+		$dataContent = $this->dataContent();
+
 		// #1875
 		// title attribute contains stripped content to allow for a display in
 		// no-js environments, the tooltip will remove the element once it is
@@ -237,10 +258,10 @@ class Highlighter {
 			[
 				'class'        => 'smw-highlighter',
 				'data-type'    => $this->options['type'],
-				'data-content' => $this->options['data-content'] ?? null,
 				'data-state'   => $this->options['state'],
 				'data-title'   => Message::get( $this->options['title'], Message::TEXT, $language ),
-				'title'        => $title
+				'title'        => $title,
+				'data-content' => $dataContent
 			] + $attribs,
 			Html::rawElement(
 				'span',
@@ -253,11 +274,14 @@ class Highlighter {
 				[
 					'class' => 'smwttcontent'
 				],
-				// Embedded wiki content that has other elements like (e.g. <ul>/<ol>)
-				// will make the parser go berserk (injecting <p> elements etc.)
-				// hence encode the identifying </> and decode it within the
-				// tooltip
-				str_replace( [ "\n", '<', '>' ], [ '</br>', '&lt;', '&gt;' ], htmlspecialchars_decode( $this->options['content'] ?? '' ) )
+				// When the content travels in the `data-content` attribute the
+				// text node stays empty: an attribute is never re-processed by
+				// the surrounding page parse, while text placed here is (#5494).
+				// Otherwise embedded wiki content that has other elements like
+				// (e.g. <ul>/<ol>) will make the parser go berserk (injecting
+				// <p> elements etc.) hence encode the identifying </> and
+				// decode it within the tooltip
+				$dataContent !== null ? '' : str_replace( [ "\n", '<', '>' ], [ '</br>', '&lt;', '&gt;' ], htmlspecialchars_decode( $this->options['content'] ?? '' ) )
 			)
 		);
 
@@ -335,6 +359,18 @@ class Highlighter {
 		return $settings;
 	}
 
+	private function dataContent(): ?string {
+		$dataContent = $this->options['data-content'] ?? null;
+
+		if ( $dataContent === null || mb_strlen( $dataContent ) <= self::MAX_DATA_CONTENT_LENGTH ) {
+			return $dataContent;
+		}
+
+		// Only give the attribute up when the text node can carry the content
+		// instead; without a fallback an empty tooltip is the worse outcome
+		return ( $this->options['content'] ?? '' ) !== '' ? null : $dataContent;
+	}
+
 	private function title( $content, string|int $language ): string {
 		// Pre-process the content when used as title to avoid breaking elements
 		// (URLs etc.)
@@ -343,11 +379,17 @@ class Highlighter {
 			$content = Message::get( [ 'smw-parse', $content ], Message::PARSE, $language );
 		}
 
-		return strip_tags(
+		$title = strip_tags(
 			htmlspecialchars_decode(
 				str_replace( [ "[", '&#160;', "&#10;", "\n", "&#39;", "'" ], [ "&#91;", ' ', '', '', '' ], $content ),
 			)
 		);
+
+		if ( mb_strlen( $title ) > self::MAX_TITLE_LENGTH ) {
+			$title = mb_substr( $title, 0, self::MAX_TITLE_LENGTH - 2 ) . ' …';
+		}
+
+		return $title;
 	}
 
 }

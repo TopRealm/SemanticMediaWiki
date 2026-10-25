@@ -69,6 +69,57 @@ class TaskFactoryTest extends TestCase {
 		);
 	}
 
+	/**
+	 * @dataProvider requiredPermissionProvider
+	 */
+	public function testNewByTypeDeclaresRequiredPermission( string $type, string $expectedPermission ) {
+		$instance = $this->newTaskFactory();
+
+		$this->assertSame(
+			$expectedPermission,
+			$instance->newByType( $type )->getRequiredPermission()
+		);
+	}
+
+	public function requiredPermissionProvider() {
+		// `update` and `run-joblist` authorize against the caller-supplied
+		// subject (see testNewByTypeDeclaresAuthorizationSubject), so they no
+		// longer opt down to the wiki-wide `edit` right and inherit the safe
+		// `smw-admin` default for the global-right path they never take.
+		yield 'update' => [ 'update', 'smw-admin' ];
+		yield 'check-query' => [ 'check-query', 'edit' ];
+		yield 'run-joblist' => [ 'run-joblist', 'smw-admin' ];
+		yield 'run-entity-examiner' => [ 'run-entity-examiner', 'read' ];
+		yield 'table-statistics' => [ 'table-statistics', 'smw-admin' ];
+		yield 'duplicate-lookup' => [ 'duplicate-lookup', 'smw-admin' ];
+		yield 'insert-job' => [ 'insert-job', 'smw-admin' ];
+	}
+
+	/**
+	 * @dataProvider authorizationSubjectProvider
+	 */
+	public function testNewByTypeDeclaresAuthorizationSubject( string $type, bool $authorizesSubject ) {
+		$instance = $this->newTaskFactory();
+
+		$subject = $instance->newByType( $type )
+			->getAuthorizationSubject( [ 'subject' => 'Foo#0##' ] );
+
+		$this->assertSame(
+			$authorizesSubject,
+			$subject !== null
+		);
+	}
+
+	public function authorizationSubjectProvider() {
+		// Tasks that act on a caller-supplied page authorize against that page;
+		// every other task gates on its global getRequiredPermission() right.
+		yield 'update' => [ 'update', true ];
+		yield 'run-joblist' => [ 'run-joblist', true ];
+		yield 'check-query' => [ 'check-query', false ];
+		yield 'table-statistics' => [ 'table-statistics', false ];
+		yield 'insert-job' => [ 'insert-job', false ];
+	}
+
 	public function testNewByTypeOnUnknownTypeThrowsException() {
 		$instance = $this->newTaskFactory();
 
@@ -98,6 +149,9 @@ class TaskFactoryTest extends TestCase {
 		$settings = $this->getMockBuilder( Settings::class )
 			->disableOriginalConstructor()
 			->getMock();
+
+		$settings->method( 'get' )
+			->willReturnCallback( static fn ( string $key ) => $key === 'smwgCacheUsage' ? [] : null );
 
 		$hookContainer = $this->getMockBuilder( HookContainer::class )
 			->disableOriginalConstructor()

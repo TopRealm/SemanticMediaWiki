@@ -92,6 +92,98 @@ class HighlighterTest extends TestCase {
 		);
 	}
 
+	public function testOversizedTitleIsTruncatedWithAnEllipsis() {
+		$this->assertSame(
+			str_repeat( 'a', 1022 ) . ' …',
+			$this->titleAttributeOf( $this->htmlForContent( str_repeat( 'a', 2000 ) ) )
+		);
+	}
+
+	public function testOversizedTitleIsTruncatedByCharactersNotBytes() {
+		$this->assertSame(
+			str_repeat( '日本語 ', 255 ) . '日本' . ' …',
+			$this->titleAttributeOf( $this->htmlForContent( str_repeat( '日本語 ', 500 ) ) )
+		);
+	}
+
+	public function testTitleAttributeKeepsShortContentIntact() {
+		$content = 'Property Foo has an invalid value.';
+
+		$this->assertSame(
+			$content,
+			$this->titleAttributeOf( $this->htmlForContent( $content ) )
+		);
+	}
+
+	public function testOversizedContentRemainsAvailableForTheTooltip() {
+		$content = str_repeat( 'lorem ipsum ', 50000 );
+
+		$this->assertStringContainsString(
+			'<span class="smwttcontent">' . $content . '</span>',
+			$this->htmlForContent( $content )
+		);
+	}
+
+	public function testDataContentKeepsTheTooltipTextNodeEmpty() {
+		$html = $this->htmlWithDataContent( 'Plain fallback text', '<a href="http://example.org/">foo</a>' );
+
+		$this->assertStringContainsString(
+			'data-content="&lt;a href=&quot;http://example.org/&quot;&gt;foo&lt;/a&gt;"',
+			$html
+		);
+
+		$this->assertStringContainsString(
+			'<span class="smwttcontent"></span>',
+			$html
+		);
+	}
+
+	public function testOversizedDataContentFallsBackToTheTooltipTextNode() {
+		$content = str_repeat( 'lorem ipsum ', 50000 );
+
+		$html = $this->htmlWithDataContent( 'Plain fallback text', $content );
+
+		$this->assertStringNotContainsString(
+			'data-content=',
+			$html,
+			'an attribute that grows with the content revives the tidy blowup of #7076'
+		);
+
+		$this->assertStringContainsString(
+			'<span class="smwttcontent">Plain fallback text</span>',
+			$html
+		);
+	}
+
+	private function htmlWithDataContent( string $content, string $dataContent ): string {
+		$instance = Highlighter::factory( Highlighter::TYPE_PROPERTY );
+
+		$instance->setContent( [
+			'caption' => 'Foo',
+			'content' => $content,
+			'data-content' => $dataContent
+		] );
+
+		return $instance->getHtml();
+	}
+
+	private function htmlForContent( string $content ): string {
+		$instance = Highlighter::factory( Highlighter::TYPE_TEXT );
+
+		$instance->setContent( [
+			'caption' => ' … ',
+			'content' => $content
+		] );
+
+		return $instance->getHtml();
+	}
+
+	private function titleAttributeOf( string $html ): string {
+		preg_match( '/ title="([^"]*)"/', $html, $matches );
+
+		return $matches[1] ?? '';
+	}
+
 	public function getTypeDataProvider() {
 		return [
 			[ '', Highlighter::TYPE_NOTYPE ],
