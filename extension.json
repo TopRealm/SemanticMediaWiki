@@ -1,6 +1,6 @@
 {
 	"name": "SemanticMediaWiki",
-	"version": "7.4.0-alpha",
+	"version": "7.4.2-alpha",
 	"author": [
 		"[https://korrekt.org Markus Krötzsch]",
 		"[https://EntropyWins.wtf/mediawiki Jeroen De Dauw]",
@@ -14,7 +14,7 @@
 	"license-name": "GPL-2.0-or-later",
 	"type": "semantic",
 	"requires": {
-		"MediaWiki": ">= 1.43"
+		"MediaWiki": ">= 1.43.4"
 	},
 	"MessagesDirs": {
 		"SemanticMediaWiki": [
@@ -259,6 +259,7 @@
 				"SMW.ContentParserFactory",
 				"SMW.RevisionGuard",
 				"SMW.SiteReadiness",
+				"SMW.ParsoidUse",
 				"SMW.Logger"
 			]
 		},
@@ -431,8 +432,7 @@
 		"SemanticMediaWiki.Elastic.RegisterEntityExaminerDeferrableIndicatorProviders": {
 			"class": "SMW\\Elastic\\Hooks\\RegisterEntityExaminerDeferrableIndicatorProviders",
 			"services": [
-				"SMW.ElasticFactory",
-				"SMW.EntityCache"
+				"SMW.ElasticFactory"
 			]
 		},
 		"SemanticMediaWiki.Elastic.RegisterTaskHandlers": {
@@ -1002,7 +1002,7 @@
 			}
 		},
 		"ext.smw.factbox": {
-			"packagedFiles": [
+			"packageFiles": [
 				"smw/ext.smw.factbox.js"
 			]
 		},

@@ -53,6 +53,11 @@ class SearchTableRebuilder {
 	private ?array $chunkTables = null;
 
 	/**
+	 * @var array<int, bool> Keyed by property ID (`p_id`)
+	 */
+	private array $exemptedProperties = [];
+
+	/**
 	 * @since 2.5
 	 */
 	public function __construct(
@@ -119,7 +124,7 @@ class SearchTableRebuilder {
 	 *
 	 * @since 2.5
 	 *
-	 * @return void|bool
+	 * @return bool|null Null if the index cannot be rebuilt
 	 */
 	public function rebuild(): ?bool {
 		if ( !$this->canRebuild() ) {
@@ -130,9 +135,9 @@ class SearchTableRebuilder {
 			return $this->doOptimize();
 		}
 
-		$this->doRebuild();
+		[ , $status ] = $this->rebuildInChunks();
 
-		return true;
+		return $status === 'success';
 	}
 
 	/**
@@ -172,8 +177,8 @@ class SearchTableRebuilder {
 		while ( $cursor !== null ) {
 			try {
 				$cursor = $this->rebuildChunk( $cursor, $batchSize );
-			} catch ( Throwable ) {
-				// Don't throw
+			} catch ( Throwable $e ) {
+				$this->reportMessage( "\nChunk starting at -s $cursor failed: " . $e->getMessage() . "\n" );
 				$status = 'failure';
 				break;
 			}
@@ -183,29 +188,39 @@ class SearchTableRebuilder {
 			}
 		}
 
-		// Report
-		$cliMsgFormatter = new CliMsgFormatter();
 		// Ends the line that rebuildChunk keeps overwriting with
 		// its progress
 		$this->reportMessage( "\n" );
-		$this->reportMessage( $cliMsgFormatter->section( "Unindexed table(s)", 3, '-', true ), $this->reportVerbose );
 
-		foreach ( $this->skippedTables as $tableName => $reason ) {
-			$this->reportMessage(
-				$cliMsgFormatter->twoCols( "... $tableName", $reason, 3, '.' ),
-				$this->reportVerbose
-			);
+		if ( $this->reportVerbose ) {
+			$this->reportSkippedTables();
 		}
 
 		return [ $cursor, $status ];
+	}
+
+	private function reportSkippedTables(): void {
+		$cliMsgFormatter = new CliMsgFormatter();
+
+		$this->reportMessage( $cliMsgFormatter->section( "Unindexed table(s)", 3, '-', true ) );
+
+		$this->reportMessage(
+			"\n" . $cliMsgFormatter->wordwrap( [
+				"[INVALID] refers to an invalid `DataItem` type, [FIXED] to a fixed",
+				"property without a label, [EXEMPT] is exempted from processing"
+			] ) . "\n"
+		);
+
+		foreach ( $this->skippedTables as $tableName => $reason ) {
+			$this->reportMessage( $cliMsgFormatter->twoCols( "... $tableName", $reason, 3, '.' ) );
+		}
 	}
 
 	/**
 	 * Rebuilds the index for a single chunk of subject IDs
 	 * across all indexable property tables.
 	 *
-	 * Unlike rebuild(), does not flush the index. Instead a
-	 * chunk's entries are collected from the property tables
+	 * A chunk's entries are collected from the property tables
 	 * first and then replaced in one run. As a result:
 	 * - The rest of the index remains searchable while the rebuild is running.
 	 * - A chunk can safely be repeated, e.g. after a timeout, because
@@ -258,19 +273,12 @@ class SearchTableRebuilder {
 
 		// Using MW's section transaction methods to prevent possible
 		// outages from causing empty or incomplete ranges
-		$this->connection->beginSectionTransaction( __METHOD__ );
-		try {
-			// Period between removing entries from the chunk and
-			// repopulation must be kept as short as possible!
-			$this->replaceBySidRange( $texts, $fromSid, $toSid );
-			$this->connection->endSectionTransaction( __METHOD__ );
-		} catch ( Throwable $e ) {
-			$this->connection->cancelSectionTransaction( __METHOD__ );
-			$this->messageReporter->reportMessage(
-				"\nChunk starting at -s $fromSid failed: " . $e->getMessage() . "\n"
-			);
-			throw $e;
-		}
+		// Period between removing entries from the chunk and
+		// repopulation must be kept as short as possible!
+		$this->connection->doSectionTransaction(
+			__METHOD__,
+			fn () => $this->replaceBySidRange( $texts, $fromSid, $toSid )
+		);
 
 		if ( $maxSid > 0 ) {
 			$cliMsgFormatter = new CliMsgFormatter();
@@ -389,75 +397,6 @@ class SearchTableRebuilder {
 		return true;
 	}
 
-	private function doRebuild(): void {
-		$cliMsgFormatter = new CliMsgFormatter();
-		$propertyTables = [];
-
-		$this->reportMessage( "\nProcessing table(s) ..." );
-
-		$this->reportMessage(
-			"\n" . $cliMsgFormatter->firstCol( "... purging the index table ...", 3 )
-		);
-
-		$this->searchTableUpdater->flushTable();
-
-		$this->reportMessage(
-			$cliMsgFormatter->secondCol( CliMsgFormatter::OK )
-		);
-
-		$this->reportMessage(
-			$cliMsgFormatter->firstCol( "... counting suitable table(s) ...", 3 )
-		);
-
-		foreach ( $this->searchTableUpdater->getPropertyTables() as $proptable ) {
-
-			// Only care for Blob/Uri tables
-			if ( !$this->getSearchTable()->isValidByType( $proptable->getDiType() ) ) {
-				$this->skippedTables[$proptable->getName() ?? ''] = '[INVALID]';
-				continue;
-			}
-
-			$propertyTables[] = $proptable;
-		}
-
-		$this->reportMessage(
-			$cliMsgFormatter->secondCol( (string)count( $propertyTables ) )
-		);
-
-		foreach ( $propertyTables as $propertyTable ) {
-			$this->doRebuildByPropertyTable( $propertyTable );
-		}
-
-		$this->reportMessage( "   ... done.\n" );
-
-		$this->reportMessage(
-			$cliMsgFormatter->section( "Unindexed table(s)", 3, '-', true ),
-			$this->reportVerbose
-		);
-
-		$text = [
-			"[INVALID] refers to an invalid `DataItem` type, [EMPTY] describes",
-			"a table that contains no data, [EXEMPT] is exempted from processing"
-		];
-
-		$this->reportMessage(
-			"\n" . $cliMsgFormatter->wordwrap( $text ) . "\n",
-			$this->reportVerbose
-		);
-
-		$this->reportMessage(
-			"\nList unprocessed table(s) ...\n",
-			$this->reportVerbose
-		);
-
-		foreach ( $this->skippedTables as $tableName => $reason ) {
-			$this->reportMessage(
-				$cliMsgFormatter->twoCols( "... $tableName", $reason, 3, '.' ),
-				$this->reportVerbose
-			);
-		}
-	}
-
 	private function doRebuildByPropertyTable( $proptable ) {
 		$searchTable = $this->getSearchTable();
 		$fetchFields = $this->getFetchFields( $proptable );
@@ -479,7 +418,7 @@ class SearchTableRebuilder {
 				$property
 			);
 
-			if ( $searchTable->isExemptedPropertyById( $pid ) ) {
+			if ( $this->isExemptedProperty( $pid ) ) {
 				$this->skippedTables[$table] = '[EXEMPT]';
 				return $this->skippedTables[$table];
 			}
@@ -573,7 +512,7 @@ class SearchTableRebuilder {
 				$row
 			);
 
-			if ( $searchTable->isExemptedPropertyById( $pid ) ||
+			if ( $this->isExemptedProperty( $pid ) ||
 				!$searchTable->hasMinTokenLength( $indexableText ) ) {
 				continue;
 			}
@@ -595,6 +534,20 @@ class SearchTableRebuilder {
 		}
 
 		$this->reportMessage( "\n" );
+	}
+
+	/**
+	 * Each row asks for its property, but the answer depends on the property
+	 * alone, and the lookup behind it can cost a cache or database round trip.
+	 */
+	private function isExemptedProperty( int|string $pid ): bool {
+		$pid = (int)$pid;
+
+		if ( !isset( $this->exemptedProperties[$pid] ) ) {
+			$this->exemptedProperties[$pid] = $this->getSearchTable()->isExemptedPropertyById( $pid );
+		}
+
+		return $this->exemptedProperties[$pid];
 	}
 
 	private function reportMessage( string $message, bool $verbose = true ): void {
@@ -629,7 +582,7 @@ class SearchTableRebuilder {
 
 			// Exclude rows from exempted properties and those
 			// with text below the minimum token length
-			if ( $searchTable->isExemptedPropertyById( $pid ) ||
+			if ( $this->isExemptedProperty( $pid ) ||
 				!$searchTable->hasMinTokenLength( $indexableText ) ) {
 				continue;
 			}
@@ -685,8 +638,7 @@ class SearchTableRebuilder {
 	/**
 	 * Get the specifications of all property tables that are
 	 * eligible for a chunked rebuild.
-	 * Any table that's not eligible is recorded in `$skippedTables`
-	 * (same as when a full rebuild is done).
+	 * Any table that's not eligible is recorded in `$skippedTables`.
 	 *
 	 * @since 7.4.0
 	 *
@@ -722,7 +674,7 @@ class SearchTableRebuilder {
 
 				$pid = $searchTable->getIdByProperty( $property );
 
-				if ( $searchTable->isExemptedPropertyById( $pid ) ) {
+				if ( $this->isExemptedProperty( $pid ) ) {
 					$this->skippedTables[$table] = '[EXEMPT]';
 					continue;
 				}

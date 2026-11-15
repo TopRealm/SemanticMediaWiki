@@ -9,6 +9,7 @@ use SMW\DataTypeRegistry;
 use SMW\Exception\DataItemException;
 use SMW\MediaWiki\LinkBatch;
 use SMW\RequestOptions;
+use SMW\SQLStore\EntityStore\Exception\DataItemHandlerException;
 use SMW\SQLStore\Lookup\RedirectTargetLookup;
 use SMW\Store;
 
@@ -183,13 +184,7 @@ class PrefetchItemLookup {
 				continue;
 			}
 
-			$sid = $idTable->getSMWPageID(
-				$subject->getDBkey(),
-				$subject->getNamespace(),
-				$subject->getInterwiki(),
-				$subject->getSubobjectName(),
-				true
-			);
+			$sid = $idTable->findCanonicalId( $subject );
 
 			if ( $sid == 0 ) {
 				continue;
@@ -271,7 +266,7 @@ class PrefetchItemLookup {
 
 			try {
 				$dataItem = $diHandler->newFromDBKeys( $dbkeys );
-			} catch ( DataItemException ) {
+			} catch ( DataItemException | DataItemHandlerException ) {
 				// maybe type assignment changed since data was stored;
 				// don't worry, but we can only drop the data here
 				continue;

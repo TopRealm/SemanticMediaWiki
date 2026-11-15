@@ -40,6 +40,7 @@ use SMW\MediaWiki\LinkBatch;
 use SMW\MediaWiki\MediaWikiNsContentReader;
 use SMW\MediaWiki\MwCollaboratorFactory;
 use SMW\MediaWiki\PageCreator;
+use SMW\MediaWiki\ParsoidUse;
 use SMW\MediaWiki\Permission\TitlePermissions;
 use SMW\MediaWiki\PermissionManager;
 use SMW\MediaWiki\PostProcHandlerFactory;
@@ -176,7 +177,8 @@ return [
 		}
 
 		return new EntityCache(
-			$servicesFactory->getObjectCache()
+			$servicesFactory->getObjectCache(),
+			new MapCacheLRU( 1000 )
 		);
 	},
 
@@ -526,7 +528,8 @@ return [
 			$servicesFactory->getStore(),
 			$servicesFactory->getEntityCache(),
 			$servicesFactory->getPermissionManager(),
-			$servicesFactory->getPageCreator()
+			$servicesFactory->getPageCreator(),
+			$services->getRestrictionStore()
 		);
 
 		$protectionValidator->setImportPerformers(
@@ -598,6 +601,10 @@ return [
 
 	'SMW.Logger' => static function ( MediaWikiServices $services ): LoggerInterface {
 		return LoggerFactory::getInstance( 'smw' );
+	},
+
+	'SMW.ParsoidUse' => static function ( MediaWikiServices $services ): ParsoidUse {
+		return new ParsoidUse( $services->getMainConfig() );
 	},
 
 	'SMW.PropertyLabelFinder' => static function ( MediaWikiServices $services ): PropertyLabelFinder {
@@ -858,9 +865,8 @@ return [
 		return new DependencyValidatorFactory(
 			$servicesFactory->getNamespaceExaminer(),
 			$servicesFactory->getQueryDependencyLinksStoreFactory(),
-			$servicesFactory->getEntityCache(),
-			$servicesFactory->getEventDispatcher(),
-			$services->getParserCache()
+			$servicesFactory->getObjectCache(),
+			$servicesFactory->getEventDispatcher()
 		);
 	},
 

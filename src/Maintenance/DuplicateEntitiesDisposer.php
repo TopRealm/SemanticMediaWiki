@@ -5,6 +5,7 @@ namespace SMW\Maintenance;
 use Onoi\MessageReporter\MessageReporterAwareTrait;
 use SMW\DataItems\DataItem;
 use SMW\MediaWiki\Api\Tasks\Task;
+use SMW\MediaWiki\Connection\Database;
 use SMW\SQLStore\PropertyTableInfoFetcher;
 use SMW\SQLStore\RedirectStore;
 use SMW\SQLStore\SQLStore;
@@ -23,6 +24,8 @@ use Wikimedia\ObjectCache\BagOStuff;
 class DuplicateEntitiesDisposer {
 
 	use MessageReporterAwareTrait;
+
+	private const BATCH_SIZE = 1000;
 
 	private ?PeriodicStatsFlusher $statsFlusher = null;
 
@@ -141,108 +144,97 @@ class DuplicateEntitiesDisposer {
 		return is_array( $obj ) || ( is_object( $obj ) && ( $obj instanceof Traversable ) );
 	}
 
-	private function wikipage_table( string $table, $duplicates, &$log ): void {
+	private function wikipage_table( string $table, array $duplicates, array &$log ): void {
+		$this->replaceDuplicates(
+			$table,
+			$duplicates,
+			[ 's_id', 'p_id', 'o_id' ],
+			static fn ( array $duplicate ): string => "{$duplicate['s_id']}, {$duplicate['p_id']}, {$duplicate['o_id']}",
+			$log
+		);
+	}
+
+	private function redi_table( string $table, array $duplicates, array &$log ): void {
+		$this->replaceDuplicates(
+			$table,
+			$duplicates,
+			[ 's_title', 's_namespace', 'o_id' ],
+			static fn ( array $duplicate ): string => "{$duplicate['o_id']} ({$duplicate['s_title']}#{$duplicate['s_namespace']})",
+			$log
+		);
+	}
+
+	/**
+	 * Replaces every copy of each duplicated tuple with a single one, in batches that each commit
+	 * as a whole, so that a run that stops partway cannot leave a tuple without a copy
+	 *
+	 * @param string $table
+	 * @param array[] $duplicates
+	 * @param string[] $fields The fields that identify a tuple
+	 * @param callable(array): string $describe
+	 * @param array &$log
+	 */
+	private function replaceDuplicates(
+		string $table,
+		array $duplicates,
+		array $fields,
+		callable $describe,
+		array &$log
+	): void {
 		$connection = $this->store->getConnection( 'mw.db' );
 		$log[] = "   ... $table ...";
-		$i = 0;
+		$position = 0;
 
-		// Each duplicate-tuple needs its own DELETE (composite WHERE varies
-		// per row), but the canonical re-INSERTs accumulate into one shared
-		// builder so they execute as a single statement at the end.
-		$insertBuilder = $connection->newInsertQueryBuilder()
-			->insertInto( $table )
-			->caller( __METHOD__ );
-
-		foreach ( $duplicates as $duplicate ) {
-
-			if ( $this->statsFlusher !== null ) {
-				$this->statsFlusher->tick();
+		foreach ( array_chunk( $duplicates, self::BATCH_SIZE ) as $batch ) {
+			foreach ( $batch as $duplicate ) {
+				$this->reportProgress( $position++ );
+				$log[] = [ 'DELETE' => $describe( $duplicate ) ];
 			}
 
-			if ( $i > 0 && ( $i ) % CliMsgFormatter::MAX_LEN === 0 ) {
-				$this->messageReporter->reportMessage( "\n       " );
-			} elseif ( $i == 0 ) {
-				$this->messageReporter->reportMessage( "       " );
-			}
-
-			$this->messageReporter->reportMessage( '.' );
-			$log[] = [ 'DELETE' => $duplicate['s_id'] . ", " . $duplicate['p_id'] . ', ' . $duplicate['o_id'] ];
-
-			$connection->newDeleteQueryBuilder()
-				->deleteFrom( $table )
-				->where( [
-					's_id' => $duplicate['s_id'],
-					'p_id' => $duplicate['p_id'],
-					'o_id' => $duplicate['o_id'],
-				] )
-				->caller( __METHOD__ )
-				->execute();
-
-			$insertBuilder->row( [
-				's_id' => $duplicate['s_id'],
-				'p_id' => $duplicate['p_id'],
-				'o_id' => $duplicate['o_id'],
-			] );
-
-			$i++;
-		}
-
-		if ( $i > 0 ) {
-			$insertBuilder->execute();
+			$connection->doSectionTransaction(
+				__METHOD__,
+				fn () => $this->replaceBatch( $connection, $table, $batch, $fields )
+			);
 		}
 	}
 
-	private function redi_table( string $table, $duplicates, &$log ): void {
-		$connection = $this->store->getConnection( 'mw.db' );
-		$log[] = "   ... $table ...";
-		$i = 0;
-
-		// Each duplicate-tuple needs its own DELETE (composite WHERE varies
-		// per row), but the canonical re-INSERTs accumulate into one shared
-		// builder so they execute as a single statement at the end.
+	/**
+	 * @param Database $connection
+	 * @param string $table
+	 * @param array[] $batch
+	 * @param string[] $fields
+	 */
+	private function replaceBatch( Database $connection, string $table, array $batch, array $fields ): void {
+		// Each tuple needs its own DELETE, as its WHERE differs, but their copies go into one INSERT
 		$insertBuilder = $connection->newInsertQueryBuilder()
 			->insertInto( $table )
 			->caller( __METHOD__ );
 
-		foreach ( $duplicates as $duplicate ) {
+		$copies = 0;
 
+		foreach ( $batch as $duplicate ) {
 			if ( $this->statsFlusher !== null ) {
 				$this->statsFlusher->tick();
 			}
 
-			if ( $i > 0 && ( $i ) % CliMsgFormatter::MAX_LEN === 0 ) {
-				$this->messageReporter->reportMessage( "\n       " );
-			} elseif ( $i == 0 ) {
-				$this->messageReporter->reportMessage( "       " );
-			}
-
-			$this->messageReporter->reportMessage( '.' );
-			$log[] = [ 'DELETE' => $duplicate['o_id'] . " (" . $duplicate['s_title'] . '#' . $duplicate['s_namespace'] . ")" ];
+			$tuple = array_intersect_key( $duplicate, array_flip( $fields ) );
 
 			$connection->newDeleteQueryBuilder()
 				->deleteFrom( $table )
-				->where( [
-					's_title' => $duplicate['s_title'],
-					's_namespace' => $duplicate['s_namespace'],
-					'o_id' => $duplicate['o_id'],
-				] )
+				->where( $tuple )
 				->caller( __METHOD__ )
 				->execute();
 
-			if ( $duplicate['s_title'] === '' ) {
+			// A tuple with an empty value, such as a redirect without a title, gets no copy
+			if ( in_array( '', $tuple, true ) ) {
 				continue;
 			}
 
-			$insertBuilder->row( [
-				's_title' => $duplicate['s_title'],
-				's_namespace' => $duplicate['s_namespace'],
-				'o_id' => $duplicate['o_id'],
-			] );
-
-			$i++;
+			$insertBuilder->row( $tuple );
+			$copies++;
 		}
 
-		if ( $i > 0 ) {
+		if ( $copies > 0 ) {
 			$insertBuilder->execute();
 		}
 	}
@@ -262,13 +254,8 @@ class DuplicateEntitiesDisposer {
 				$this->statsFlusher->tick();
 			}
 
-			if ( $i > 0 && ( $i ) % CliMsgFormatter::MAX_LEN === 0 ) {
-				$this->messageReporter->reportMessage( "\n       " );
-			} elseif ( $i == 0 ) {
-				$this->messageReporter->reportMessage( "       " );
-			}
+			$this->reportProgress( $i );
 
-			$this->messageReporter->reportMessage( '.' );
 			$res = $connection->newSelectQueryBuilder()
 				->select( [ 'smw_id' ] )
 				->from( SQLStore::ID_TABLE )
@@ -294,6 +281,16 @@ class DuplicateEntitiesDisposer {
 
 			$i++;
 		}
+	}
+
+	private function reportProgress( int $position ): void {
+		if ( $position === 0 ) {
+			$this->messageReporter->reportMessage( "       " );
+		} elseif ( $position % CliMsgFormatter::MAX_LEN === 0 ) {
+			$this->messageReporter->reportMessage( "\n       " );
+		}
+
+		$this->messageReporter->reportMessage( '.' );
 	}
 
 }

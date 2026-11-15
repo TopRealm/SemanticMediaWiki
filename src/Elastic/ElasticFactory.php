@@ -47,6 +47,7 @@ use SMW\Services\ServicesContainer;
 use SMW\Services\ServicesFactory as ApplicationFactory;
 use SMW\SQLStore\SQLStore;
 use SMW\Store;
+use SMW\Utils\ConceptExpansionGuard;
 
 /**
  * @license GPL-2.0-or-later
@@ -223,7 +224,7 @@ class ElasticFactory {
 
 		$fileIndexer = new FileIndexer(
 			$store,
-			$applicationFactory->getEntityCache(),
+			$applicationFactory->getObjectCache(),
 			$fileHandler,
 			$fileAttachment
 		);
@@ -280,7 +281,7 @@ class ElasticFactory {
 		$replicationCheck = new ReplicationCheck(
 			$store,
 			$this->newDocumentReplicationExaminer( $store ),
-			$applicationFactory->getEntityCache(),
+			$applicationFactory->getObjectCache(),
 			new TemplateParser( __DIR__ . '/../../templates/EntityExaminer' )
 		);
 
@@ -388,7 +389,7 @@ class ElasticFactory {
 		$replicationInfoProvider = new ReplicationInfoProvider(
 			$outputFormatter,
 			$this->newReplicationCheck( $store ),
-			$applicationFactory->getEntityCache()
+			$applicationFactory->getObjectCache()
 		);
 
 		$taskHandlers = [
@@ -410,7 +411,8 @@ class ElasticFactory {
 	): ConceptDescriptionInterpreter {
 		return new ConceptDescriptionInterpreter(
 			$containerBuilder,
-			ApplicationFactory::getInstance()->getQueryFactory()->newQueryParser()
+			ApplicationFactory::getInstance()->getQueryFactory()->newQueryParser(),
+			new ConceptExpansionGuard( ConceptExpansionGuard::DEFAULT_MAX_EXPANSIONS )
 		);
 	}
 

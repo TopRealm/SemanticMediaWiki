@@ -5,15 +5,16 @@ namespace SMW\Tests\Unit\Property;
 use PHPUnit\Framework\TestCase;
 use SMW\DataItemFactory;
 use SMW\DataItems\DataItem;
+use SMW\DataItems\Property;
 use SMW\DataValues\DataValue;
 use SMW\DataValues\MonolingualTextValue;
 use SMW\DataValues\StringValue;
-use SMW\EntityCache;
 use SMW\Property\LanguageFalldownAndInverse;
 use SMW\Property\SpecificationLookup;
 use SMW\SQLStore\Lookup\MonolingualTextLookup;
 use SMW\Store;
 use SMW\Tests\TestEnvironment;
+use SMW\Tests\Utils\EntityCacheFactory;
 
 /**
  * @covers \SMW\Property\SpecificationLookup
@@ -41,10 +42,7 @@ class SpecificationLookupTest extends TestCase {
 			->setMethods( [ 'service' ] )
 			->getMockForAbstractClass();
 
-		$this->entityCache = $this->getMockBuilder( EntityCache::class )
-			->disableOriginalConstructor()
-			->setMethods( [ 'save', 'fetch', 'associate', 'fetchSub', 'saveSub', 'delete', 'invalidate' ] )
-			->getMock();
+		$this->entityCache = EntityCacheFactory::newEntityCache();
 
 		$this->monolingualTextLookup = $this->getMockBuilder( MonolingualTextLookup::class )
 			->disableOriginalConstructor()
@@ -122,43 +120,55 @@ class SpecificationLookupTest extends TestCase {
 		);
 	}
 
-	public function testGetSpecification() {
+	public function testGetSpecificationReadsTheStoreOnlyOnce() {
 		$property = $this->dataItemFactory->newDIProperty( 'Foo' );
 
 		$this->store->expects( $this->once() )
 			->method( 'getPropertyValues' )
-			->with(
-				$property->getDiWikiPage(),
-				$this->dataItemFactory->newDIProperty( 'Bar' ),
-				$this->anything() );
-
-		$this->entityCache->expects( $this->once() )
-			->method( 'fetchSub' )
-			->willReturn( false );
+			->willReturn( [ $this->dataItemFactory->newDIBlob( 'Bar' ) ] );
 
 		$instance = new SpecificationLookup(
 			$this->store,
 			$this->entityCache
 		);
 
-		$instance->getSpecification(
-			$property,
-			$this->dataItemFactory->newDIProperty( 'Bar' )
+		$instance->getSpecification( $property, $this->dataItemFactory->newDIProperty( 'Bar' ) );
+
+		$this->assertEquals(
+			[ $this->dataItemFactory->newDIBlob( 'Bar' ) ],
+			$instance->getSpecification( $property, $this->dataItemFactory->newDIProperty( 'Bar' ) )
+		);
+	}
+
+	public function testSpecificationsOfDifferentAttributesAreCachedSeparately() {
+		$property = $this->dataItemFactory->newDIProperty( 'Foo' );
+
+		$this->store->expects( $this->any() )
+			->method( 'getPropertyValues' )
+			->willReturnCallback( fn ( $subject, Property $target ) => [ $this->dataItemFactory->newDIBlob( $target->getKey() ) ] );
+
+		$instance = new SpecificationLookup(
+			$this->store,
+			$this->entityCache
+		);
+
+		$instance->getSpecification( $property, new Property( '_PVAL' ) );
+
+		$this->assertEquals(
+			[ $this->dataItemFactory->newDIBlob( '_PVAP' ) ],
+			$instance->getSpecification( $property, new Property( '_PVAP' ) )
 		);
 	}
 
 	public function testGetSpecification_SkipCache() {
 		$property = $this->dataItemFactory->newDIProperty( 'Foo' );
 
-		$this->store->expects( $this->once() )
+		$this->store->expects( $this->exactly( 2 ) )
 			->method( 'getPropertyValues' )
 			->with(
 				$property->getDiWikiPage(),
 				$this->dataItemFactory->newDIProperty( 'Bar' ),
 				$this->anything() );
-
-		$this->entityCache->expects( $this->never() )
-			->method( 'fetchSub' );
 
 		$instance = new SpecificationLookup(
 			$this->store,
@@ -167,10 +177,8 @@ class SpecificationLookupTest extends TestCase {
 
 		$instance->skipCache();
 
-		$instance->getSpecification(
-			$property,
-			$this->dataItemFactory->newDIProperty( 'Bar' )
-		);
+		$instance->getSpecification( $property, $this->dataItemFactory->newDIProperty( 'Bar' ) );
+		$instance->getSpecification( $property, $this->dataItemFactory->newDIProperty( 'Bar' ) );
 	}
 
 	public function testGetFieldList() {
@@ -185,10 +193,6 @@ class SpecificationLookupTest extends TestCase {
 			->willReturn( [
 					$this->dataItemFactory->newDIBlob( 'Foo' ),
 					$this->dataItemFactory->newDIBlob( 'abc;123' ) ] );
-
-		$this->entityCache->expects( $this->once() )
-			->method( 'fetchSub' )
-			->willReturn( false );
 
 		$instance = new SpecificationLookup(
 			$this->store,
@@ -216,10 +220,6 @@ class SpecificationLookupTest extends TestCase {
 				$this->dataItemFactory->newDIProperty( '_PPLB' ),
 				$this->anything() );
 
-		$this->entityCache->expects( $this->once() )
-			->method( 'fetchSub' )
-			->willReturn( false );
-
 		$instance = new SpecificationLookup(
 			$this->store,
 			$this->entityCache
@@ -242,10 +242,6 @@ class SpecificationLookupTest extends TestCase {
 				$this->anything() )
 			->willReturn( [ $this->dataItemFactory->newDIBoolean( true ) ] );
 
-		$this->entityCache->expects( $this->once() )
-			->method( 'fetchSub' )
-			->willReturn( false );
-
 		$instance = new SpecificationLookup(
 			$this->store,
 			$this->entityCache
@@ -266,10 +262,6 @@ class SpecificationLookupTest extends TestCase {
 				$this->dataItemFactory->newDIProperty( '_PEFU' ),
 				$this->anything() )
 			->willReturn( [ $this->dataItemFactory->newDIUri( 'http', 'example.org/$1' ) ] );
-
-		$this->entityCache->expects( $this->once() )
-			->method( 'fetchSub' )
-			->willReturn( false );
 
 		$instance = new SpecificationLookup(
 			$this->store,
@@ -293,10 +285,6 @@ class SpecificationLookupTest extends TestCase {
 				$this->anything() )
 			->willReturn( [ $this->dataItemFactory->newDIBlob( 'IPv4' ) ] );
 
-		$this->entityCache->expects( $this->once() )
-			->method( 'fetchSub' )
-			->willReturn( false );
-
 		$instance = new SpecificationLookup(
 			$this->store,
 			$this->entityCache
@@ -318,10 +306,6 @@ class SpecificationLookupTest extends TestCase {
 				$this->dataItemFactory->newDIProperty( '_PVALI' ),
 				$this->anything() )
 			->willReturn( [ $this->dataItemFactory->newDIBlob( 'Foo' ) ] );
-
-		$this->entityCache->expects( $this->once() )
-			->method( 'fetchSub' )
-			->willReturn( false );
 
 		$instance = new SpecificationLookup(
 			$this->store,
@@ -350,10 +334,6 @@ class SpecificationLookupTest extends TestCase {
 				$this->anything() )
 			->willReturn( $expected );
 
-		$this->entityCache->expects( $this->once() )
-			->method( 'fetchSub' )
-			->willReturn( false );
-
 		$instance = new SpecificationLookup(
 			$this->store,
 			$this->entityCache
@@ -375,10 +355,6 @@ class SpecificationLookupTest extends TestCase {
 				$this->dataItemFactory->newDIProperty( '_PREC' ),
 				$this->anything() )
 			->willReturn( [ $this->dataItemFactory->newDINumber( -2.3 ) ] );
-
-		$this->entityCache->expects( $this->once() )
-			->method( 'fetchSub' )
-			->willReturn( false );
 
 		$instance = new SpecificationLookup(
 			$this->store,
@@ -403,10 +379,6 @@ class SpecificationLookupTest extends TestCase {
 			->willReturn( [
 				$this->dataItemFactory->newDIBlob( 'abc,def' ),
 				$this->dataItemFactory->newDIBlob( '123' ) ] );
-
-		$this->entityCache->expects( $this->once() )
-			->method( 'fetchSub' )
-			->willReturn( false );
 
 		$instance = new SpecificationLookup(
 			$this->store,
@@ -433,10 +405,6 @@ class SpecificationLookupTest extends TestCase {
 				$this->dataItemFactory->newDIProperty( '_PDESC' ),
 				$this->anything() );
 
-		$this->entityCache->expects( $this->once() )
-			->method( 'fetchSub' )
-			->willReturn( false );
-
 		$instance = new SpecificationLookup(
 			$this->store,
 			$this->entityCache
@@ -448,25 +416,84 @@ class SpecificationLookupTest extends TestCase {
 		);
 	}
 
-	public function testGetPropertyDescriptionForPredefinedPropertyViaCacheForLanguageCode() {
+	public function testPropertyDescriptionIsCachedPerLanguageCode() {
 		$property = $this->dataItemFactory->newDIProperty( 'Foo' );
-
-		$this->entityCache->expects( $this->once() )
-			->method( 'fetchSub' )
-			->with(
-				$this->stringContains( 'smw:entity:propertyspecificationlookup:description:1313b81bb6a61a4661f7b91408659f86' ),
-				'en:0' )
-			->willReturn( 'cached description' );
+		$this->givenTextsThatCountTheirLookUps();
 
 		$instance = new SpecificationLookup(
 			$this->store,
 			$this->entityCache
 		);
 
-		$this->assertEquals(
-			'cached description',
-			$instance->getPropertyDescriptionByLanguageCode( $property, 'en' )
+		$this->assertSame(
+			[ "''en 1''", "''de 1''", "''en 1''" ],
+			[
+				$instance->getPropertyDescriptionByLanguageCode( $property, 'en' ),
+				$instance->getPropertyDescriptionByLanguageCode( $property, 'de' ),
+				$instance->getPropertyDescriptionByLanguageCode( $property, 'en' )
+			]
 		);
+	}
+
+	public function testPlainAndHtmlPropertyDescriptionsAreCachedSeparately() {
+		$property = $this->dataItemFactory->newDIProperty( 'Foo' );
+		$this->givenTextsThatCountTheirLookUps();
+
+		$instance = new SpecificationLookup(
+			$this->store,
+			$this->entityCache
+		);
+
+		$instance->getPropertyDescriptionByLanguageCode( $property, 'en' );
+
+		$this->assertStringNotContainsString(
+			"''",
+			$instance->getPropertyDescriptionAsHtml( $property, 'en' )
+		);
+	}
+
+	public function testPreferredPropertyLabelIsCachedPerLanguageCode() {
+		$property = $this->dataItemFactory->newDIProperty( 'Foo' );
+		$this->givenTextsThatCountTheirLookUps();
+
+		$instance = new SpecificationLookup(
+			$this->store,
+			$this->entityCache
+		);
+
+		$this->assertSame(
+			[ "''en 1''", "''de 1''", "''en 1''" ],
+			[
+				$instance->getPreferredPropertyLabelByLanguageCode( $property, 'en' ),
+				$instance->getPreferredPropertyLabelByLanguageCode( $property, 'de' ),
+				$instance->getPreferredPropertyLabelByLanguageCode( $property, 'en' )
+			]
+		);
+	}
+
+	/**
+	 * Each text names its language and how often it was looked up, in wikitext
+	 */
+	private function givenTextsThatCountTheirLookUps(): void {
+		$lookUps = [];
+
+		$this->monolingualTextLookup->expects( $this->any() )
+			->method( 'newDataValue' )
+			->willReturnCallback( function ( $subject, $property, $languageCode ) use ( &$lookUps ) {
+				$lookUps[$languageCode] = ( $lookUps[$languageCode] ?? 0 ) + 1;
+
+				$text = $this->createMock( StringValue::class );
+				$text->method( 'getShortWikiText' )->willReturn( "''$languageCode {$lookUps[$languageCode]}''" );
+
+				$value = $this->createMock( MonolingualTextValue::class );
+				$value->method( 'getTextValueByLanguageCode' )->willReturn( $text );
+
+				return $value;
+			} );
+
+		$this->store->expects( $this->any() )
+			->method( 'service' )
+			->willReturn( $this->monolingualTextLookup );
 	}
 
 	public function testTryToGetLocalPropertyDescriptionForUserdefinedProperty() {
@@ -497,10 +524,6 @@ class SpecificationLookupTest extends TestCase {
 				$this->anything() )
 			->willReturn( $monolingualTextValue );
 
-		$this->entityCache->expects( $this->once() )
-			->method( 'fetchSub' )
-			->willReturn( false );
-
 		$instance = new SpecificationLookup(
 			$this->store,
 			$this->entityCache
@@ -526,10 +549,6 @@ class SpecificationLookupTest extends TestCase {
 				return [ [ $dataItem ], [ $bool ] ][$callCount++];
 			} );
 
-		$this->entityCache->expects( $this->once() )
-			->method( 'fetchSub' )
-			->willReturn( false );
-
 		$instance = new SpecificationLookup(
 			$this->store,
 			$this->entityCache
@@ -541,22 +560,62 @@ class SpecificationLookupTest extends TestCase {
 		);
 	}
 
-	public function testInvalidateCache() {
-		$subject = $this->dataItemFactory->newDIWikiPage( 'Foo' );
+	public function testHasNoUniquenessConstraintWhenItIsSetToFalse() {
+		$this->store->expects( $this->any() )
+			->method( 'getPropertyValues' )
+			->willReturn( [ $this->dataItemFactory->newDIBoolean( false ) ] );
 
-		$this->entityCache->expects( $this->once() )
-			->method( 'invalidate' )
-			->with( $subject );
+		$instance = new SpecificationLookup( $this->store, $this->entityCache );
 
-		$this->entityCache->expects( $this->exactly( 3 ) )
-			->method( 'delete' );
+		$this->assertFalse( $instance->hasUniquenessConstraint( $this->dataItemFactory->newDIProperty( 'Foo' ) ) );
+	}
+
+	public function testPredefinedPropertyWithoutLocalDescriptionGetsItsSystemDescription() {
+		$this->store->expects( $this->any() )
+			->method( 'service' )
+			->willReturn( $this->monolingualTextLookup );
+
+		$instance = new SpecificationLookup( $this->store, $this->entityCache );
+
+		$this->assertNotSame(
+			'',
+			$instance->getPropertyDescriptionByLanguageCode( $this->dataItemFactory->newDIProperty( '_MDAT' ), 'en' )
+		);
+	}
+
+	public function testLastAllowedPatternApplies() {
+		$this->store->expects( $this->any() )
+			->method( 'getPropertyValues' )
+			->willReturn( [ $this->dataItemFactory->newDIBlob( 'first' ), $this->dataItemFactory->newDIBlob( 'last' ) ] );
+
+		$instance = new SpecificationLookup( $this->store, $this->entityCache );
+
+		$this->assertSame( 'last', $instance->getAllowedPatternBy( $this->dataItemFactory->newDIProperty( 'Foo' ) ) );
+	}
+
+	public function testInvalidateCacheMakesTheNextLookUpReadTheStore() {
+		$property = $this->dataItemFactory->newDIProperty( 'Foo' );
+		$target = $this->dataItemFactory->newDIProperty( 'Bar' );
+
+		$this->store->expects( $this->exactly( 2 ) )
+			->method( 'getPropertyValues' )
+			->willReturnOnConsecutiveCalls(
+				[ $this->dataItemFactory->newDIBlob( 'Outdated' ) ],
+				[ $this->dataItemFactory->newDIBlob( 'Current' ) ]
+			);
 
 		$instance = new SpecificationLookup(
 			$this->store,
 			$this->entityCache
 		);
 
-		$instance->invalidateCache( $subject );
+		$instance->getSpecification( $property, $target );
+		$instance->invalidateCache( $property->getDiWikiPage() );
+
+		$this->assertEquals(
+			[ $this->dataItemFactory->newDIBlob( 'Current' ) ],
+			$instance->getSpecification( $property, $target )
+		);
 	}
 
 }

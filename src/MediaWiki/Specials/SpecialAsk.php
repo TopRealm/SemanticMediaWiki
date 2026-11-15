@@ -320,6 +320,7 @@ class SpecialAsk extends SpecialPage {
 				echo $printer->getResult( $res, $this->params, SMW_OUTPUT_HTML ) . RemoteRequest::REQUEST_ID;
 			} elseif ( $request_type === 'special_page' ) {
 				// Generate raw content when being requested from a remote special_page
+				$this->sendInertResponseContentType();
 				echo $printer->getResult( $res, $this->params, SMW_OUTPUT_FILE ) . RemoteRequest::REQUEST_ID;
 			} else {
 				$printer->outputAsFile( $res, $this->params );
@@ -451,6 +452,11 @@ class SpecialAsk extends SpecialPage {
 		if ( !$printer->isExportFormat() ) {
 			if ( $request_type !== '' ) {
 				$this->getOutput()->disable();
+
+				if ( $request_type === 'raw' ) {
+					$this->sendInertResponseContentType();
+				}
+
 				$output = '';
 
 				$count = $res->getCount();
@@ -503,7 +509,8 @@ class SpecialAsk extends SpecialPage {
 		// A debug query (format=debug) returns the debug output as a string rather
 		// than a QueryResult, so only query results expose a score set.
 		$scoreSet = $res instanceof QueryResult ? $res->getScoreSet() : null;
-		if ( $this->getRequest()->getVal( 'score_set', false ) && $scoreSet !== null ) {
+		if ( $this->getRequest()->getVal( 'score_set', false ) && $scoreSet !== null
+			&& $this->canViewQueryDebugOutput() ) {
 			$table = $scoreSet->asTable( 'sortable wikitable smwtable-striped broadtable' );
 
 			if ( $table !== '' ) {
@@ -512,10 +519,32 @@ class SpecialAsk extends SpecialPage {
 		}
 
 		if ( $native_result !== '' ) {
-			$result .= '<h2>Native result</h2>' . '<pre>' . $native_result . '</pre>';
+			$result .= '<h2>Native result</h2>' . '<pre>' . htmlspecialchars( $native_result ) . '</pre>';
 		}
 
 		return [ $result, $res, $duration ];
+	}
+
+	/**
+	 * A remote `request_type` response is echoed with the OutputPage disabled, so without an
+	 * explicit content type it defaults to text/html; the file-export and raw branches carry
+	 * user-supplied separators and stored property values verbatim, which then execute as markup.
+	 * Serve those branches as inert plain text instead. The `embed` branch stays HTML by design.
+	 */
+	private function sendInertResponseContentType(): void {
+		$response = $this->getRequest()->response();
+		$response->header( 'Content-Type: text/plain; charset=UTF-8' );
+		$response->header( 'X-Content-Type-Options: nosniff' );
+	}
+
+	/**
+	 * The `native_result`, `score_set` and `q_engine` request parameters expose
+	 * query-engine internals (including the raw backend response) and are intended
+	 * as administrative diagnostics, so honour them only for the `smw-admin`
+	 * administration right rather than for every reader.
+	 */
+	private function canViewQueryDebugOutput(): bool {
+		return $this->getAuthority()->isAllowed( 'smw-admin' );
 	}
 
 	private function getQueryLog( $duration, bool $isFromCache = false ): array {
@@ -525,7 +554,8 @@ class SpecialAsk extends SpecialPage {
 			$source = $this->parameters['source'];
 		}
 
-		if ( $this->getRequest()->getVal( 'q_engine' ) === 'sql_store' ) {
+		if ( $this->getRequest()->getVal( 'q_engine' ) === 'sql_store'
+			&& $this->canViewQueryDebugOutput() ) {
 			$source = 'sql_store';
 		}
 
@@ -673,7 +703,8 @@ class SpecialAsk extends SpecialPage {
 			$queryobj->setOption( Query::NO_CACHE, true );
 		}
 
-		if ( $this->getRequest()->getVal( 'native_result', false ) ) {
+		if ( $this->getRequest()->getVal( 'native_result', false )
+			&& $this->canViewQueryDebugOutput() ) {
 			$queryobj->setOption( 'native_result', true );
 		}
 
@@ -681,7 +712,8 @@ class SpecialAsk extends SpecialPage {
 		$source = $params['source']->getValue();
 		$noSource = $source === '';
 
-		if ( $this->getRequest()->getVal( 'q_engine' ) === 'sql_store' ) {
+		if ( $this->getRequest()->getVal( 'q_engine' ) === 'sql_store'
+			&& $this->canViewQueryDebugOutput() ) {
 			$source = 'sql_store';
 		}
 
@@ -710,7 +742,8 @@ class SpecialAsk extends SpecialPage {
 			$queryobj
 		);
 
-		if ( $this->getRequest()->getVal( 'native_result', false ) && $queryobj->native_result !== '' ) {
+		if ( $this->getRequest()->getVal( 'native_result', false ) && $this->canViewQueryDebugOutput()
+			&& $queryobj->native_result !== '' ) {
 			$native_result = $queryobj->native_result;
 		}
 

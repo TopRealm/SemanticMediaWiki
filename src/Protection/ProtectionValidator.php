@@ -3,6 +3,7 @@
 namespace SMW\Protection;
 
 use MediaWiki\Permissions\PermissionManager as MwPermissionManager;
+use MediaWiki\Permissions\RestrictionStore;
 use MediaWiki\Title\Title;
 use MediaWiki\User\User;
 use SMW\DataItems\Property;
@@ -49,6 +50,7 @@ class ProtectionValidator {
 		private readonly EntityCache $entityCache,
 		private readonly PermissionManager $permissionManager,
 		private readonly PageCreator $pageCreator,
+		private readonly RestrictionStore $restrictionStore,
 	) {
 	}
 
@@ -78,23 +80,9 @@ class ProtectionValidator {
 				continue;
 			}
 
-			$subject = $this->store->getObjectIds()->getDataItemById(
-				$record->get( 'row.s_id' )
+			$this->entityCache->invalidate(
+				$this->store->getObjectIds()->getDataItemById( $record->get( 'row.s_id' ) )
 			);
-
-			// Target the `_CHGPRO`-specific slot written by checkProtection() (this
-			// listener only ever handles the `_CHGPRO` property).
-			$key = $this->entityCache->makeCacheKey( 'protection', $subject->getHash(), '_CHGPRO' );
-
-			// If the change is an insert type then the `Change propagation` property
-			// was added hence use this as a short cut to store the state avoiding
-			// an extra lookup query and allow the state to be available as soon
-			// as possible.
-			if ( $record->has( 'is_insert' ) && $record->get( 'is_insert' ) === true ) {
-				$this->entityCache->save( $key, 'yes' );
-			} else {
-				$this->entityCache->delete( $key );
-			}
 		}
 	}
 
@@ -312,29 +300,59 @@ class ProtectionValidator {
 		// The property must be part of the key: `checkProtection()` is called for
 		// both `_CHGPRO` (change-propagation lock) and `_EDIP` (edit protection),
 		// and a shared slot let one concern's cached result be read for the other.
-		$key = $this->entityCache->makeCacheKey( 'protection', $subject->getHash(), $property->getKey() );
-		$hasProtection = false;
+		$hasProtection = $this->entityCache->getWithSetCallback(
+			$subject,
+			$this->entityCache->makeKey( 'protection', $subject->getHash(), $property->getKey() ),
+			// A check while replicas lag behind a new `_CHGPRO` finds no lock, and
+			// the job that removes `_CHGPRO` can be a long way off
+			$property->getKey() === '_CHGPRO' ? EntityCache::TTL_MINUTE : EntityCache::TTL_WEEK,
+			// As a literal, since a cached `false` would count as a miss
+			fn () => $this->findProtection( $subject, $property ) ? 'yes' : 'no'
+		);
 
-		if ( $this->entityCache->contains( $key ) ) {
-			return $this->entityCache->fetch( $key ) === 'yes';
+		if ( $hasProtection !== 'yes' ) {
+			return false;
 		}
 
+		// A stored `_EDIP` value only constitutes edit protection when the matching
+		// MediaWiki edit restriction is actually in place. Applying that restriction
+		// requires the configured edit-protection right (see EditProtectionUpdater),
+		// so a bare `[[Is edit protected::true]]` from an editor without the right
+		// records the value but leaves the page unrestricted and must not lock it.
+		if ( $property->getKey() === '_EDIP' ) {
+			return $this->hasActiveEditProtectionRestriction( $subject );
+		}
+
+		return true;
+	}
+
+	private function hasActiveEditProtectionRestriction( WikiPage $subject ): bool {
+		$title = $subject->getTitle();
+
+		if ( $title === null ) {
+			return false;
+		}
+
+		if ( !$this->restrictionStore->isProtected( $title, 'edit' ) ) {
+			return false;
+		}
+
+		$restrictions = array_flip( $this->restrictionStore->getRestrictions( $title, 'edit' ) );
+
+		return isset( $restrictions[$this->editProtectionRight] );
+	}
+
+	private function findProtection( WikiPage $subject, Property $property ): bool {
 		$dataItems = $this->store->getPropertyValues(
 			$subject,
 			$property
 		);
 
-		if ( $dataItems !== null && $dataItems !== [] ) {
-			$hasProtection = $property->getKey() === '_EDIP' ? end( $dataItems )->getBoolean() : true;
+		if ( $dataItems === null || $dataItems === [] ) {
+			return false;
 		}
 
-		// Store as literal so that the check avoids a `false` and is not
-		// attempting to read from the store on every check where it hasn't
-		// found a positive confirmation
-		$this->entityCache->save( $key, ( $hasProtection ? 'yes' : 'no' ) );
-		$this->entityCache->associate( $subject, $key );
-
-		return $hasProtection;
+		return $property->getKey() === '_EDIP' ? end( $dataItems )->getBoolean() : true;
 	}
 
 }

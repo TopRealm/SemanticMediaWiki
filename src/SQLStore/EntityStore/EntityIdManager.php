@@ -525,6 +525,27 @@ class EntityIdManager {
 	}
 
 	/**
+	 * The ID the page's values are stored under: the ID the page carries, or,
+	 * when it carries none or is a redirect, the ID found with redirects
+	 * resolved.
+	 *
+	 * @since 7.4.2
+	 */
+	public function findCanonicalId( WikiPage $subject ): int {
+		if ( $subject->getId() !== 0 && $subject->getInterwiki() !== SMW_SQL3_SMWREDIIW ) {
+			return $subject->getId();
+		}
+
+		return $this->getSMWPageID(
+			$subject->getDBkey(),
+			$subject->getNamespace(),
+			$subject->getInterwiki(),
+			$subject->getSubobjectName(),
+			true
+		);
+	}
+
+	/**
 	 * Convenience method for calling getSMWPageIDandSort without
 	 * specifying a sortkey (if not asked for).
 	 *
@@ -636,6 +657,8 @@ class EntityIdManager {
 
 		$db->beginAtomicTransaction( __METHOD__ );
 
+		$sortkey = TableFieldUpdater::fitSortColumn( (string)$sortkey );
+
 		if ( $id == 0 ) {
 			$sortkey = $sortkey ?: ( str_replace( '_', ' ', $title ) );
 
@@ -643,9 +666,6 @@ class EntityIdManager {
 			$sequenceValue = $db->nextSequenceValue(
 				Sequence::makeSequence( SQLStore::ID_TABLE, 'smw_id' )
 			);
-
-			// #2089 (MySQL 5.7 complained with "Data too long for column")
-			$sortkey = mb_substr( $sortkey, 0, 254 );
 
 			$db->newInsertQueryBuilder()
 				->insertInto( SQLStore::ID_TABLE )
@@ -656,7 +676,7 @@ class EntityIdManager {
 					'smw_iw' => $iw,
 					'smw_subobject' => $subobjectName,
 					'smw_sortkey' => $sortkey,
-					'smw_sort' => $collator->armoredSortKey( $sortkey ),
+					'smw_sort' => TableFieldUpdater::fitSortColumn( $collator->armoredSortKey( $sortkey ) ),
 					'smw_hash' => $db->escape_bytea( $this->computeSha1( [ $title, (int)$namespace, $iw, $subobjectName ] ) ),
 					'smw_touched' => $db->timestamp(),
 				] )
@@ -782,6 +802,34 @@ class EntityIdManager {
 			->fetchRow();
 
 		return $row === false ? 0 : (int)$row->smw_rev;
+	}
+
+	/**
+	 * @since 7.4.1
+	 *
+	 * @param int[] $ids
+	 *
+	 * @return array<int,int> The revision recorded for each ID, 0 where there is none
+	 */
+	public function findAssociatedRevs( array $ids ): array {
+		if ( $ids === [] ) {
+			return [];
+		}
+
+		$rows = $this->store->getConnection( 'mw.db' )->newSelectQueryBuilder()
+			->select( [ 'smw_id', 'smw_rev' ] )
+			->from( SQLStore::ID_TABLE )
+			->where( [ 'smw_id' => array_values( $ids ) ] )
+			->caller( __METHOD__ )
+			->fetchResultSet();
+
+		$revisions = array_fill_keys( $ids, 0 );
+
+		foreach ( $rows as $row ) {
+			$revisions[(int)$row->smw_id] = (int)$row->smw_rev;
+		}
+
+		return $revisions;
 	}
 
 	/**

@@ -21,7 +21,6 @@ use SMW\DataModel\SemanticData;
 use SMW\DataTypeRegistry;
 use SMW\DataUpdater;
 use SMW\DataValueFactory;
-use SMW\DependencyValidator;
 use SMW\DisplayTitleFinder;
 use SMW\Elastic\ElasticFactory;
 use SMW\EntityCache;
@@ -1050,26 +1049,6 @@ class ServicesFactory {
 	/**
 	 * @since 7.0.0
 	 */
-	public function newDependencyValidator( string $eTag, int $cacheTTL ): DependencyValidator {
-		if ( array_key_exists( 'DependencyValidator', $this->testOverrides ) ) {
-			return $this->testOverrides['DependencyValidator'];
-		}
-
-		$queryDependencyLinksStoreFactory = $this->getQueryDependencyLinksStoreFactory();
-
-		return new DependencyValidator(
-			$this->getNamespaceExaminer(),
-			$queryDependencyLinksStoreFactory->newDependencyLinksValidator(),
-			$this->getEntityCache(),
-			$eTag,
-			$cacheTTL,
-			$this->getEventDispatcher()
-		);
-	}
-
-	/**
-	 * @since 7.0.0
-	 */
 	public function newEditProtectionUpdater( WikiPage $wikiPage, ?User $user = null ): EditProtectionUpdater {
 		if ( array_key_exists( 'EditProtectionUpdater', $this->testOverrides ) ) {
 			return $this->testOverrides['EditProtectionUpdater'];
@@ -1123,16 +1102,10 @@ class ServicesFactory {
 			return $this->testOverrides['QueryResultStore'];
 		}
 
-		$cacheFactory = $this->getCacheFactory();
-
 		$store = new QueryResultStore(
 			$namespace,
 			$this->getObjectCache( $cacheType ),
 			new MapCacheLRU( 500 )
-		);
-
-		$store->setNamespacePrefix(
-			$cacheFactory->getCachePrefix()
 		);
 
 		$store->setExpiryInSeconds(

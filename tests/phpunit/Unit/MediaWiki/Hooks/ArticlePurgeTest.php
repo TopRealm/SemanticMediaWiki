@@ -4,7 +4,6 @@ namespace SMW\Tests\Unit\MediaWiki\Hooks;
 
 use PHPUnit\Framework\TestCase;
 use SMW\EventDispatcher\EventDispatcher;
-use SMW\Factbox\CachedFactbox;
 use SMW\MediaWiki\Hooks\ArticlePurge;
 use SMW\Services\ServicesFactory as ApplicationFactory;
 use SMW\Settings;
@@ -78,22 +77,12 @@ class ArticlePurgeTest extends TestCase {
 
 		$instance = new ArticlePurge( $store, $this->cache, $settings, $this->eventDispatcher );
 
-		$factboxCacheKey = CachedFactbox::makeCacheKey( $pageId );
 		$purgeCacheKey = smwfCacheKey( ArticlePurge::CACHE_NAMESPACE, $pageId );
 
 		$this->assertEquals(
 			$expected['autorefreshPreProcess'],
 			$this->cache->get( $purgeCacheKey ),
 			'Asserts the autorefresh cache status before processing'
-		);
-
-		// Travis 210.5, 305.3
-		$travis = $this->cache->get( $factboxCacheKey );
-		$travisText = json_encode( $travis );
-		$this->assertEquals(
-			$expected['factboxPreProcess'],
-			$travis,
-			"Asserts the factbox cache status before processing, {$travisText}"
 		);
 
 		$this->assertFalse(
@@ -112,12 +101,6 @@ class ArticlePurgeTest extends TestCase {
 			$expected['autorefreshPostProcess'],
 			$this->cache->get( $purgeCacheKey ),
 			'Asserts the autorefresh cache status after processing'
-		);
-
-		$this->assertEquals(
-			$expected['factboxPostProcess'],
-			$this->cache->get( $factboxCacheKey ),
-			'Asserts the factbox cache status after processing'
 		);
 	}
 
@@ -145,10 +128,8 @@ class ArticlePurgeTest extends TestCase {
 				'smwgQueryResultCacheRefreshOnPurge' => false
 			],
 			[
-				'factboxPreProcess'      => false,
 				'autorefreshPreProcess'  => false,
 				'autorefreshPostProcess' => true,
-				'factboxPostProcess'     => false,
 			]
 		];
 
@@ -175,10 +156,8 @@ class ArticlePurgeTest extends TestCase {
 				'smwgQueryResultCacheRefreshOnPurge' => false
 			],
 			[
-				'factboxPreProcess'      => false,
 				'autorefreshPreProcess'  => false,
 				'autorefreshPostProcess' => false,
-				'factboxPostProcess'     => false,
 			]
 		];
 
@@ -205,10 +184,8 @@ class ArticlePurgeTest extends TestCase {
 				'smwgQueryResultCacheRefreshOnPurge' => false
 			],
 			[
-				'factboxPreProcess'      => false,
 				'autorefreshPreProcess'  => false,
 				'autorefreshPostProcess' => false,
-				'factboxPostProcess'     => false,
 			]
 		];
 
@@ -221,10 +198,8 @@ class ArticlePurgeTest extends TestCase {
 				'smwgQueryResultCacheRefreshOnPurge' => false
 			],
 			[
-				'factboxPreProcess'      => false,
 				'autorefreshPreProcess'  => false,
 				'autorefreshPostProcess' => false,
-				'factboxPostProcess'     => false,
 			]
 		];
 

@@ -35,6 +35,11 @@ require_once __DIR__ . '/_mw_bootstrap.php';
 class rebuildElasticMissingDocuments extends Maintenance {
 
 	/**
+	 * Entities whose documents are read in one request
+	 */
+	private const CHECK_BATCH_SIZE = 500;
+
+	/**
 	 * @var Store
 	 */
 	private $store;
@@ -295,6 +300,7 @@ class rebuildElasticMissingDocuments extends Maintenance {
 		$cliMsgFormatter->setStartTime( (int)microtime( true ) );
 
 		$statsFlusher = PeriodicStatsFlusher::newFromGlobalState();
+		$batch = [];
 
 		foreach ( $rows as $row ) {
 
@@ -304,12 +310,7 @@ class rebuildElasticMissingDocuments extends Maintenance {
 				continue;
 			}
 
-			$progress = $cliMsgFormatter->progressCompact( ++$i, $count, $row->smw_id, $this->lastId );
-
-			$this->reportMessage(
-				$cliMsgFormatter->twoColsOverride( "... checking ID to document reference ...", $progress, 3 )
-			);
-
+			$i++;
 			$subject = $this->newFromRow( $row );
 
 			if ( $subject === null ) {
@@ -322,14 +323,49 @@ class rebuildElasticMissingDocuments extends Maintenance {
 				continue;
 			}
 
-			// Check on object and page entity
-			$result = $this->documentReplicationExaminer->check(
-				$subject,
-				[
-					DocumentReplicationExaminer::CHECK_DOCUMENT_EXISTS => true,
-					DocumentReplicationExaminer::CHECK_MISSING_FILE_ATTACHMENT => $this->getOption( 'check-file-attachment', false )
-				]
-			);
+			$batch[] = [ $row, $subject, $title ];
+
+			if ( count( $batch ) >= self::CHECK_BATCH_SIZE ) {
+				$this->checkAndRebuildBatch( $batch, $errorCount );
+				$this->reportProgress( $cliMsgFormatter, $i, $count, (int)$row->smw_id );
+				$batch = [];
+			}
+		}
+
+		if ( $batch !== [] ) {
+			$this->checkAndRebuildBatch( $batch, $errorCount );
+		}
+
+		$this->reportProgress( $cliMsgFormatter, $i, $count, $this->lastId );
+
+		return $errorCount;
+	}
+
+	private function reportProgress( CliMsgFormatter $cliMsgFormatter, int $checked, int $count, int $id ): void {
+		$this->reportMessage(
+			$cliMsgFormatter->twoColsOverride(
+				"... checking ID to document reference ...",
+				$cliMsgFormatter->progressCompact( $checked, $count, $id, $this->lastId ),
+				3
+			)
+		);
+	}
+
+	/**
+	 * @param array[] $batch Each entry holds a row, its subject and its title
+	 * @param int[] &$errorCount The number of errors by type
+	 */
+	private function checkAndRebuildBatch( array $batch, array &$errorCount ): void {
+		$results = $this->documentReplicationExaminer->checkAll(
+			array_column( $batch, 1 ),
+			[
+				DocumentReplicationExaminer::CHECK_DOCUMENT_EXISTS => true,
+				DocumentReplicationExaminer::CHECK_MISSING_FILE_ATTACHMENT => $this->getOption( 'check-file-attachment', false )
+			]
+		);
+
+		foreach ( $batch as $key => [ $row, $subject, $title ] ) {
+			$result = $results[$key];
 
 			if ( !$result instanceof ReplicationError ) {
 				continue;
@@ -375,8 +411,6 @@ class rebuildElasticMissingDocuments extends Maintenance {
 
 			$job->run();
 		}
-
-		return $errorCount;
 	}
 
 	public function newFromRow( $row ) {

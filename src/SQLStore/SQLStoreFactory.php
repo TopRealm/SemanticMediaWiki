@@ -15,6 +15,7 @@ use SMW\Lookup\CachedListLookup;
 use SMW\Lookup\ListLookup;
 use SMW\MediaWiki\Collator;
 use SMW\MediaWiki\Deferred\TransactionalCallableUpdate;
+use SMW\MediaWiki\ParsoidUse;
 use SMW\RequestOptions;
 use SMW\Services\ServicesContainer;
 use SMW\Services\ServicesFactory as ApplicationFactory;
@@ -41,6 +42,7 @@ use SMW\SQLStore\EntityStore\SemanticDataLookup;
 use SMW\SQLStore\EntityStore\SequenceMapFinder;
 use SMW\SQLStore\EntityStore\SubobjectListFinder;
 use SMW\SQLStore\EntityStore\TraversalPropertyLookup;
+use SMW\SQLStore\Installer\ParserExaminer;
 use SMW\SQLStore\Installer\TableOptimizer;
 use SMW\SQLStore\Installer\VersionExaminer;
 use SMW\SQLStore\Lookup\ByGroupPropertyValuesLookup;
@@ -153,7 +155,7 @@ class SQLStoreFactory {
 	 * @return PropertyTableUpdater
 	 */
 	public function newPropertyTableUpdater(): PropertyTableUpdater {
-		return new PropertyTableUpdater( $this->store, $this->newPropertyStatisticsStore() );
+		return new PropertyTableUpdater( $this->store, $this->newPropertyStatisticsStore(), $this->getLogger() );
 	}
 
 	/**
@@ -298,8 +300,6 @@ class SQLStoreFactory {
 			ApplicationFactory::getInstance()->getObjectCache(),
 			$cacheOptions
 		);
-
-		$cachedListLookup->setCachePrefix( $cacheFactory->getCachePrefix() );
 
 		return $cachedListLookup;
 	}
@@ -475,6 +475,7 @@ class SQLStoreFactory {
 			$tableBuildExaminer,
 			$versionExaminer,
 			$tableOptimizer,
+			new ParserExaminer( new ParsoidUse( $mwServices->getMainConfig() ) ),
 			$mwServices->getTitleFactory(),
 			$mwServices->getJobFactory()
 		);
@@ -612,21 +613,9 @@ class SQLStoreFactory {
 	 * @return PropertyStatisticsStore
 	 */
 	public function newPropertyStatisticsStore(): PropertyStatisticsStore {
-		$propertyStatisticsStore = new PropertyStatisticsStore(
+		return new PropertyStatisticsStore(
 			$this->store->getConnection( 'mw.db' )
 		);
-
-		$propertyStatisticsStore->setLogger(
-			$this->getLogger()
-		);
-
-		$propertyStatisticsStore->isCommandLineMode(
-			Site::isCommandLineMode()
-		);
-
-		$propertyStatisticsStore->waitOnTransactionIdle();
-
-		return $propertyStatisticsStore;
 	}
 
 	/**
@@ -648,7 +637,8 @@ class SQLStoreFactory {
 			$caches[$key] = new InstrumentedCache(
 				$inMemoryPoolCache->getPoolCacheById( $poolId, $cacheSize ),
 				$statsFactory,
-				$poolId
+				$poolId,
+				Site::isCommandLineMode()
 			);
 		}
 
@@ -817,14 +807,14 @@ class SQLStoreFactory {
 	 *
 	 * @return RedirectUpdater
 	 */
-	public function newRedirectUpdater(): RedirectUpdater {
+	public function newRedirectUpdater( PropertyTableUpdater $propertyTableUpdater ): RedirectUpdater {
 		$settings = ApplicationFactory::getInstance()->getSettings();
 
 		$redirectUpdater = new RedirectUpdater(
 			$this->store,
 			$this->newIdChanger(),
 			$this->newTableFieldUpdater(),
-			$this->newPropertyStatisticsStore()
+			$propertyTableUpdater
 		);
 
 		$redirectUpdater->setEqualitySupport(

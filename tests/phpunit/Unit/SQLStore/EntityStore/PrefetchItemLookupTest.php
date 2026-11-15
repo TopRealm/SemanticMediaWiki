@@ -3,6 +3,7 @@
 namespace SMW\Tests\Unit\SQLStore\EntityStore;
 
 use PHPUnit\Framework\TestCase;
+use SMW\DataItems\GeoCoord;
 use SMW\DataItems\Property;
 use SMW\DataItems\WikiPage;
 use SMW\DataModel\SequenceMap;
@@ -10,6 +11,7 @@ use SMW\MediaWiki\LinkBatch;
 use SMW\RequestOptions;
 use SMW\SQLStore\EntityStore\CachingSemanticDataLookup;
 use SMW\SQLStore\EntityStore\DataItemHandler;
+use SMW\SQLStore\EntityStore\DataItemHandlers\DIGeoCoordinateHandler;
 use SMW\SQLStore\EntityStore\EntityIdManager;
 use SMW\SQLStore\EntityStore\PrefetchItemLookup;
 use SMW\SQLStore\EntityStore\PropertySubjectsLookup;
@@ -142,6 +144,51 @@ class PrefetchItemLookupTest extends TestCase {
 		);
 	}
 
+	public function testGetPropertyValuesSkipsValuesWithUndecodableDbKeys() {
+		$instance = $this->newInstanceWithPrefetchedGeoDbKeys(
+			[ 42 => [ '52,5', null, 'not-a-coordinate', '53,6' ] ]
+		);
+
+		$res = $instance->getPropertyValues(
+			[ WikiPage::newFromText( __METHOD__ ) ],
+			new Property( 'Foo' ),
+			new RequestOptions()
+		);
+
+		$this->assertEquals(
+			[
+				new GeoCoord( [ 'lat' => 52, 'lon' => 5 ] ),
+				new GeoCoord( [ 'lat' => 53, 'lon' => 6 ] )
+			],
+			array_values( $res[42] )
+		);
+	}
+
+	private function newInstanceWithPrefetchedGeoDbKeys( array $dbKeysBySubjectId ): PrefetchItemLookup {
+		$this->store->method( 'getPropertyTables' )
+			->willReturn( [ 'smw_di_coords' => $this->createStub( PropertyTableDefinition::class ) ] );
+
+		$this->store->method( 'findPropertyTableID' )
+			->willReturn( 'smw_di_coords' );
+
+		$this->store->method( 'getDataItemHandlerForDIType' )
+			->willReturn( new DIGeoCoordinateHandler( $this->store ) );
+
+		$this->store->method( 'getObjectIds' )
+			->willReturn( $this->createStub( EntityIdManager::class ) );
+
+		$this->semanticDataLookup->method( 'prefetchDataFromTable' )
+			->willReturn( $dbKeysBySubjectId );
+
+		return new PrefetchItemLookup(
+			$this->store,
+			$this->semanticDataLookup,
+			$this->propertySubjectsLookup,
+			$this->linkBatch,
+			$this->createStub( SequenceMap::class )
+		);
+	}
+
 	public function testGetPropertyValues_InvertedProperty() {
 		$subjects = [
 			WikiPage::newFromText( __METHOD__ ),
@@ -240,6 +287,69 @@ class PrefetchItemLookupTest extends TestCase {
 			],
 			$res
 		);
+	}
+
+	public function testInvertedPropertyQueriesTheIdsItsSubjectsCarry() {
+		$subject = WikiPage::newFromText( 'Foo' );
+		$subject->setId( 42 );
+
+		$this->assertSame( [ 42 ], $this->prefetchInverted( $subject, idFoundByLookup: 7 ) );
+	}
+
+	public function testInvertedPropertyGivesASubjectWithoutIdTheIdFoundByLookup() {
+		$subject = WikiPage::newFromText( 'Foo' );
+
+		$this->prefetchInverted( $subject, idFoundByLookup: 7 );
+
+		$this->assertSame( 7, $subject->getId() );
+	}
+
+	/**
+	 * @return int[] subject IDs the inverse prefetch queries
+	 */
+	private function prefetchInverted( WikiPage $subject, int $idFoundByLookup ): array {
+		$this->store->method( 'getObjectIds' )
+			->willReturn( $this->newEntityIdManagerFinding( $idFoundByLookup ) );
+
+		$this->store->method( 'getPropertyTables' )
+			->willReturn( [ 'smw_foo' => $this->createStub( PropertyTableDefinition::class ) ] );
+
+		$this->store->method( 'findPropertyTableID' )
+			->willReturn( 'smw_foo' );
+
+		$queriedIds = [];
+
+		$this->propertySubjectsLookup->method( 'prefetchFromTable' )
+			->willReturnCallback( static function ( array $ids ) use ( &$queriedIds ): array {
+				$queriedIds = $ids;
+				return [];
+			} );
+
+		$instance = new PrefetchItemLookup(
+			$this->store,
+			$this->semanticDataLookup,
+			$this->propertySubjectsLookup,
+			$this->linkBatch
+		);
+
+		$instance->getPropertyValues( [ $subject ], new Property( 'Foo', true ), new RequestOptions() );
+
+		return $queriedIds;
+	}
+
+	/**
+	 * An ID manager whose database lookup finds the given ID for every page.
+	 */
+	private function newEntityIdManagerFinding( int $id ): EntityIdManager {
+		return new class( $id ) extends EntityIdManager {
+
+			public function __construct( private readonly int $id ) {
+			}
+
+			public function getSMWPageID( $title, $namespace, $iw, $subobjectName, $canonical = true, $fetchHashes = false ): int {
+				return $this->id;
+			}
+		};
 	}
 
 }

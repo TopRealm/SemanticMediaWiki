@@ -2,22 +2,20 @@
 
 namespace SMW;
 
-use MediaWiki\Parser\ParserCache;
-use MediaWiki\Parser\ParserOptions;
 use SMW\EventDispatcher\EventDispatcher;
 use SMW\SQLStore\QueryDependencyLinksStoreFactory;
-use WikiPage;
+use Wikimedia\ObjectCache\BagOStuff;
 
 /**
  * Produces a fully-configured {@link DependencyValidator} for the
- * `RejectParserCacheValue` and `ArticleViewHeader` hooks, which both need a
- * per-request validator keyed on the current parser-output eTag.
+ * `RejectParserCacheValue` and `ArticleViewHeader` hooks.
  *
  * `QueryDependencyLinksStoreFactory` (not a pre-resolved
- * `DependencyLinksValidator`) is held so each `newFor()` call builds a fresh
- * validator. `DependencyLinksValidator` transitively captures `Store`, and
- * `HookContainer` caches handler instances across service-container resets, so
- * a captured validator could otherwise outlive the `Store` it was built with.
+ * `DependencyLinksValidator`) is held so each `newDependencyValidator()` call
+ * builds a fresh validator. `DependencyLinksValidator` transitively captures
+ * `Store`, and `HookContainer` caches handler instances across service-container
+ * resets, so a captured validator could otherwise outlive the `Store` it was
+ * built with.
  *
  * @license GPL-2.0-or-later
  * @since 7.0.0
@@ -30,24 +28,19 @@ class DependencyValidatorFactory {
 	public function __construct(
 		private readonly NamespaceExaminer $namespaceExaminer,
 		private readonly QueryDependencyLinksStoreFactory $queryDependencyLinksStoreFactory,
-		private readonly EntityCache $entityCache,
+		private readonly BagOStuff $cache,
 		private readonly EventDispatcher $eventDispatcher,
-		private readonly ParserCache $parserCache,
 	) {
 	}
 
 	/**
-	 * @since 7.0.0
+	 * @since 7.4.0
 	 */
-	public function newFor( WikiPage $page, ParserOptions $options ): DependencyValidator {
-		$eTag = 'W/"' . $this->parserCache->makeParserOutputKey( $page, $options ) .
-			'--' . $page->getTouched() . '"';
-
+	public function newDependencyValidator(): DependencyValidator {
 		return new DependencyValidator(
 			$this->namespaceExaminer,
 			$this->queryDependencyLinksStoreFactory->newDependencyLinksValidator(),
-			$this->entityCache,
-			$eTag,
+			$this->cache,
 			Site::getCacheExpireTime( 'parser' ),
 			$this->eventDispatcher
 		);

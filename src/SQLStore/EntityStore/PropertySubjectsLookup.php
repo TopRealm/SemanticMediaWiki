@@ -212,19 +212,11 @@ class PropertySubjectsLookup {
 		$qb = $connection->newSelectQueryBuilder();
 
 		if ( $proptable->usesIdSubject() ) {
-			$group = true;
+			$group = !$requestOptions->getOption( 'NO_GROUPBY' );
 
 			$qb->from( SQLStore::ID_TABLE )
 				->join( $proptable->getName(), 't1', 't1.s_id=smw_id' )
-				->select( [
-					'smw_id',
-					'smw_title',
-					'smw_namespace',
-					'smw_iw',
-					'smw_subobject',
-					'smw_sortkey',
-					'smw_sort',
-				] );
+				->select( $this->subjectFields( $group && !$connection->isType( 'postgres' ), $sortField ) );
 
 			// Preserve the FORCE INDEX(...) hint by translating to useIndex( [ 't1' => $name ] ).
 			// This emits USE INDEX on MySQL (vs the original FORCE INDEX). Both restrict the
@@ -280,18 +272,12 @@ class PropertySubjectsLookup {
 			}
 		}
 
-		if ( $requestOptions->getOption( 'NO_GROUPBY' ) ) {
-			$group = false;
-		}
-
 		if ( $group && $connection->isType( 'postgres' ) ) {
-			// Avoid a "... 42803 ERROR:  column "s....smw_title" must appear in
-			// the GROUP BY clause or be used in an aggregate function ..."
-			// https://stackoverflow.com/questions/1769361/postgresql-group-by-different-from-mysql
-			// DISTINCT ON keeps one row per (smw_sort, smw_id); the matching
-			// ORDER BY makes both the kept row and the output order deterministic.
-			$requestOptions->setOption( 'DISTINCT', 'ON (smw_sort, smw_id)' );
-			$requestOptions->setOption( 'ORDER BY', $sortField . ', smw_id' );
+			// PostgreSQL reduces GROUP BY (smw_sort, smw_id) to the primary key smw_id, and so
+			// aggregates every row of the property before it can return a page. smw_id determines
+			// all selected columns, so DISTINCT drops only the duplicates.
+			$requestOptions->setOption( 'DISTINCT', true );
+			$requestOptions->setOption( 'ORDER BY', $this->subjectOrder( $sortField, $requestOptions ) );
 		} elseif ( $group ) {
 			// GROUP BY (smw_sort, smw_id) collapses duplicate subjects. An
 			// explicit ORDER BY on the same columns is required for a stable
@@ -299,7 +285,7 @@ class PropertySubjectsLookup {
 			// (MariaDB still does), so without it the subject list comes back
 			// unordered on MySQL.
 			$requestOptions->setOption( 'GROUP BY', $sortField . ', smw_id' );
-			$requestOptions->setOption( 'ORDER BY', $sortField . ', smw_id' );
+			$requestOptions->setOption( 'ORDER BY', $this->subjectOrder( $sortField, $requestOptions ) );
 		} elseif ( $requestOptions->getOption( 'NO_DISTINCT' ) ) {
 			$requestOptions->setOption( 'DISTINCT', false );
 		} else {
@@ -321,13 +307,6 @@ class PropertySubjectsLookup {
 			$requestOptions,
 			$sortField
 		);
-
-		// Preserve Postgres-specific `DISTINCT ON (...)` (a string DISTINCT value),
-		// which the legacy options array supports but `->distinct()` does not.
-		if ( isset( $opts['DISTINCT'] ) && is_string( $opts['DISTINCT'] ) ) {
-			$qb->option( 'DISTINCT', $opts['DISTINCT'] );
-			unset( $opts['DISTINCT'] );
-		}
 
 		if ( $requestOptions->exclude_limit ) {
 			unset( $opts['LIMIT'], $opts['OFFSET'] );
@@ -365,6 +344,31 @@ class PropertySubjectsLookup {
 		}
 
 		return $res;
+	}
+
+	private function subjectOrder( string $sortField, RequestOptions $requestOptions ): string {
+		$direction = $requestOptions->sort && !$requestOptions->ascending ? ' DESC' : '';
+
+		return $sortField . $direction . ', smw_id' . $direction;
+	}
+
+	/**
+	 * Under GROUP BY ( $sortField, smw_id ), MariaDB's ONLY_FULL_GROUP_BY rejects the other
+	 * columns although smw_id determines them. MAX() returns each group's only value and,
+	 * unlike grouping by every column, leaves the smw_sort index able to serve the GROUP BY.
+	 *
+	 * @return string[]
+	 */
+	private function subjectFields( bool $groupBy, string $sortField ): array {
+		$columns = [ 'smw_id', 'smw_title', 'smw_namespace', 'smw_iw', 'smw_subobject', 'smw_sortkey', 'smw_sort' ];
+		$fields = [];
+
+		foreach ( $columns as $column ) {
+			$grouped = $column === 'smw_id' || $column === $sortField;
+			$fields[$column] = $groupBy && !$grouped ? "MAX($column)" : $column;
+		}
+
+		return $fields;
 	}
 
 	/**

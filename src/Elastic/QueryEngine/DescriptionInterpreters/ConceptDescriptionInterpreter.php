@@ -10,6 +10,7 @@ use SMW\Query\Language\ConceptDescription;
 use SMW\Query\Language\Conjunction;
 use SMW\Query\Language\Disjunction;
 use SMW\Query\Parser as QueryParser;
+use SMW\Utils\ConceptExpansionGuard;
 
 /**
  * @license GPL-2.0-or-later
@@ -20,11 +21,18 @@ use SMW\Query\Parser as QueryParser;
 class ConceptDescriptionInterpreter {
 
 	/**
+	 * Concepts currently being expanded on the active recursion branch, keyed by
+	 * hash, used to break reference cycles between concepts.
+	 */
+	private array $activeConcepts = [];
+
+	/**
 	 * @since 3.0
 	 */
 	public function __construct(
 		private readonly ConditionBuilder $conditionBuilder,
 		private readonly QueryParser $queryParser,
+		private readonly ConceptExpansionGuard $expansionGuard,
 	) {
 	}
 
@@ -37,38 +45,66 @@ class ConceptDescriptionInterpreter {
 	): array|Condition {
 		$concept = $description->getConcept();
 
-		$value = $this->conditionBuilder->getStore()->getPropertyValues(
-			$concept,
-			new Property( '_CONC' )
-		);
+		// Break mutual/transitive concept cycles (for example A -> B -> A). The
+		// `hasCircularConceptDescription` check below only catches a concept that
+		// references itself directly, so re-entering a concept already being
+		// expanded on this branch would otherwise recurse until memory is
+		// exhausted.
+		$hash = $concept->getHash();
 
-		if ( $value === null || $value === [] ) {
+		if ( isset( $this->activeConcepts[$hash] ) ) {
+			$this->conditionBuilder->addError( [ 'smw-query-condition-circular', $description->getQueryString() ] );
 			return [];
 		}
 
-		$value = end( $value );
-
-		$description = $this->queryParser->getQueryDescription(
-			$value->getConceptQuery()
-		);
-
-		if ( $this->hasCircularConceptDescription( $description, $concept ) ) {
+		// Bound the total concept expansion for this query build. The cycle guard
+		// above only stops a concept re-entering itself on one branch; an acyclic
+		// fan-out (shared sub-concepts reached by several disjuncts) is otherwise
+		// re-expanded once per path and grows without limit.
+		if ( !$this->expansionGuard->acquire() ) {
+			$this->conditionBuilder->addError( [ 'smw-query-condition-circular', $description->getQueryString() ] );
 			return [];
 		}
 
-		$params = $this->conditionBuilder->interpretDescription(
-			$description,
-			$isConjunction
-		);
+		try {
+			$value = $this->conditionBuilder->getStore()->getPropertyValues(
+				$concept,
+				new Property( '_CONC' )
+			);
 
-		$params = $this->terms_lookup( $description, $concept, $params );
+			if ( $value === null || $value === [] ) {
+				return [];
+			}
 
-		$condition = $this->conditionBuilder->newCondition( $params );
-		$condition->type( '' );
+			$value = end( $value );
 
-		$condition->log( [ 'ConceptDescription' => $description->getQueryString() ] );
+			$description = $this->queryParser->getQueryDescription(
+				$value->getConceptQuery()
+			);
 
-		return $condition;
+			if ( $this->hasCircularConceptDescription( $description, $concept ) ) {
+				return [];
+			}
+
+			$this->activeConcepts[$hash] = true;
+
+			$params = $this->conditionBuilder->interpretDescription(
+				$description,
+				$isConjunction
+			);
+
+			$params = $this->terms_lookup( $description, $concept, $params );
+
+			$condition = $this->conditionBuilder->newCondition( $params );
+			$condition->type( '' );
+
+			$condition->log( [ 'ConceptDescription' => $description->getQueryString() ] );
+
+			return $condition;
+		} finally {
+			unset( $this->activeConcepts[$hash] );
+			$this->expansionGuard->release();
+		}
 	}
 
 	private function terms_lookup( $description, WikiPage $concept, $params ) {

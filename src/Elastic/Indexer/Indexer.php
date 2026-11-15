@@ -2,6 +2,7 @@
 
 namespace SMW\Elastic\Indexer;
 
+use MediaWiki\Content\TextContent;
 use MediaWiki\Revision\RevisionLookup;
 use MediaWiki\Revision\RevisionRecord;
 use MediaWiki\Revision\SlotRecord;
@@ -235,7 +236,7 @@ class Indexer {
 
 		$content = $revision->getContent( SlotRecord::MAIN, RevisionRecord::RAW );
 
-		return $content->getNativeData();
+		return $content instanceof TextContent ? $content->getText() : '';
 	}
 
 	/**
@@ -254,15 +255,7 @@ class Indexer {
 			return;
 		}
 
-		$params = [
-			'_index' => $this->getIndexName( Client::TYPE_DATA )
-		];
-
-		$this->bulk->clear();
-		$this->bulk->head( $params );
-
-		$this->bulk->infuseDocument( $document );
-		$this->bulk->execute();
+		$this->sendDocuments( [ $document ] );
 
 		$this->logger->info(
 			'Indexer Data index completed ({subject}, {id}) '
@@ -277,6 +270,57 @@ class Indexer {
 				'response' => $this->bulk->getResponse()
 			]
 		);
+	}
+
+	/**
+	 * Sends the documents in one bulk request, without the replication check of indexDocument()
+	 *
+	 * @since 7.4.1
+	 *
+	 * @param Document[] $documents
+	 */
+	public function indexDocuments( array $documents ): void {
+		if ( $documents === [] ) {
+			return;
+		}
+
+		Timer::start( __METHOD__ );
+
+		$this->sendDocuments( $documents );
+
+		// The client returns a string when the whole request failed, which loses all of its documents,
+		// so they are sent again one at a time to lose only those that fail again
+		if ( is_string( $this->bulk->getResponse() ) && count( $documents ) > 1 ) {
+			foreach ( $documents as $document ) {
+				$this->sendDocuments( [ $document ] );
+			}
+		}
+
+		$this->logger->info(
+			'Indexer Data index completed ({count} documents) procTime (in sec): {procTime} Response: {response}',
+			[
+				'method' => __METHOD__,
+				'role' => 'developer',
+				'origin' => $this->origin,
+				'count' => count( $documents ),
+				'procTime' => Timer::getElapsedTime( __METHOD__ ),
+				'response' => $this->bulk->getResponse()
+			]
+		);
+	}
+
+	/**
+	 * @param Document[] $documents
+	 */
+	private function sendDocuments( array $documents ): void {
+		$this->bulk->clear();
+		$this->bulk->head( [ '_index' => $this->getIndexName( Client::TYPE_DATA ) ] );
+
+		foreach ( $documents as $document ) {
+			$this->bulk->infuseDocument( $document );
+		}
+
+		$this->bulk->execute();
 	}
 
 	private function canReplicate(): bool {
